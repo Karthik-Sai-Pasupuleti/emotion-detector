@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MediaPipe Emotion Detector</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #1a1a2e;
+            color: white;
+            font-family: Arial, sans-serif;
+            overflow: hidden; 
+        }
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #output-canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: contain; 
+        }
+        #webcam-video {
+            display: none; 
+        }
+        #loading-message {
+            position: absolute;
+            z-index: 10;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="loading-message">Requesting Camera Access...</div>
+        <video id="webcam-video" autoplay playsinline></video>
+        <canvas id="output-canvas"></canvas>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
+    
+    <script>
+        const videoElement = document.getElementById('webcam-video');
+        const canvasElement = document.getElementById('output-canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const loadingMessage = document.getElementById('loading-message');
+        
+        let camera;
+
+        // Helper function to calculate distance between two 2D points
+        function getDistance(lm1, lm2) {
+            const dx = lm1.x - lm2.x;
+            const dy = lm1.y - lm2.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        // --- 1. Initialize the Holistic Model ---
+        const holistic = new Holistic({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`;
+            }
+        });
+
+        holistic.setOptions({
+            static_image_mode: false,
+            model_complexity: 1, 
+            smooth_landmarks: true,
+            refine_face_landmarks: true,
+            min_detection_confidence: 0.5,
+            min_tracking_confidence: 0.5
+        });
+
+        holistic.onResults(onResults);
+
+        // --- 2. Handle Model Results and Drawing ---
+        function onResults(results) {
+            loadingMessage.style.display = 'none';
+
+            if (canvasElement.width !== videoElement.videoWidth) {
+                canvasElement.width = videoElement.videoWidth;
+                canvasElement.height = videoElement.videoHeight;
+            }
+
+            // --- Emotion Detection Logic ---
+            let isSmiling = false;
+            let isSad = false;
+            let headX = 0;
+            let headY = 0;
+
+            if (results.faceLandmarks) {
+                // Landmarks for smile detection (Width-based)
+                const mouthWidth = getDistance(results.faceLandmarks[61], results.faceLandmarks[291]);
+                const faceWidth = getDistance(results.faceLandmarks[234], results.faceLandmarks[454]);
+                
+                // Landmarks for sad detection (Y-axis based)
+                // Y-coordinates increase as you go DOWN the screen
+                const leftCornerY = results.faceLandmarks[61].y;
+                const rightCornerY = results.faceLandmarks[291].y;
+                const bottomLipCenterY = results.faceLandmarks[14].y;
+                const faceHeight = getDistance(results.faceLandmarks[10], results.faceLandmarks[152]);
+                
+                // Calculate average Y position of mouth corners
+                const averageCornerY = (leftCornerY + rightCornerY) / 2;
+                
+                // Frown ratio: how far below the center lip the corners are, normalized by face height
+                const frownRatio = (averageCornerY - bottomLipCenterY) / faceHeight;
+
+                // Priority 1: Check for Smile
+                if ((mouthWidth / faceWidth) > 0.43) {
+                    isSmiling = true;
+                } 
+                // Priority 2: Check for Sadness if not smiling
+                // Tune this number (e.g., 0.015 to 0.025) if it's too sensitive or not sensitive enough
+                else if (frownRatio > 0.018) {
+                    isSad = true;
+                }
+
+                // Calculate position above the head for the emoji
+                if (isSmiling || isSad) {
+                    headX = canvasElement.width - (results.faceLandmarks[10].x * canvasElement.width);
+                    headY = (results.faceLandmarks[10].y * canvasElement.height) - 50; 
+                }
+            }
+
+            // 1. Clear Canvas
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            // 2. Mirror Flip
+            canvasCtx.translate(canvasElement.width, 0);
+            canvasCtx.scale(-1, 1);
+
+            // Draw Video
+            if (results.image) {
+                canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+            }
+
+            // Draw Landmarks
+            drawConnectors(canvasCtx, results.faceLandmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
+            drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
+            drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
+            drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, { color: '#CC0000', lineWidth: 5 });
+            drawLandmarks(canvasCtx, results.leftHandLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
+            drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, { color: '#00CC00', lineWidth: 5 });
+            drawLandmarks(canvasCtx, results.rightHandLandmarks, { color: '#00FF00', lineWidth: 2, radius: 2 });
+
+            // 3. Inverse Flip for Text/Emojis
+            canvasCtx.translate(canvasElement.width, 0); 
+            canvasCtx.scale(-1, 1); 
+
+            // 4. Draw Emojis based on detected emotion
+            if (isSmiling || isSad) {
+                canvasCtx.font = '60px Arial';
+                canvasCtx.textAlign = 'center';
+                
+                const topEmoji = isSmiling ? '😊' : '😢';
+                const cornerEmoji = isSmiling ? '😁' : '😔';
+
+                // Floating above head
+                canvasCtx.fillText(topEmoji, headX, headY);
+
+                // Top left corner
+                canvasCtx.textAlign = 'left';
+                canvasCtx.fillText(cornerEmoji, 20, 60);
+            }
+
+            canvasCtx.restore();
+        }
+
+        // --- 3. Start Webcam ---
+        function startWebcam() {
+            camera = new Camera(videoElement, {
+                onFrame: async () => {
+                    if (videoElement.readyState >= 2) {
+                        await holistic.send({ image: videoElement });
+                    }
+                },
+                facingMode: 'user' 
+            });
+
+            camera.start()
+                .then(() => console.log("MediaPipe initialized."))
+                .catch(err => {
+                    console.error("Camera start failed:", err);
+                    loadingMessage.innerText = "Camera Access Denied or Unavailable.";
+                });
+        }
+
+        window.onload = startWebcam;
+    </script>
+</body>
+</html>
