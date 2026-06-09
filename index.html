@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Emotion Detector + Face Filters</title>
+    <title>Brahmi Face Filters + Emotion Detector</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -67,18 +67,15 @@
             z-index: 10;
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 14px 12px 20px;
-            background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%);
-            overflow-x: auto;
+            gap: 14px;
+            padding: 14px 12px 24px;
+            background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
             justify-content: center;
             flex-wrap: nowrap;
-            scrollbar-width: none;
         }
-        #filter-bar::-webkit-scrollbar { display: none; }
         .fbtn {
             flex-shrink: 0;
-            width: 58px; height: 58px;
+            width: 68px; height: 68px;
             border-radius: 50%;
             border: 3px solid rgba(255,255,255,0.25);
             background: rgba(255,255,255,0.08);
@@ -92,15 +89,43 @@
             justify-content: center;
             transition: all 0.2s ease;
             -webkit-tap-highlight-color: transparent;
+            overflow: hidden;
+            padding: 0;
         }
         .fbtn.active {
-            border-color: #00d4ff;
-            background: rgba(0,212,255,0.25);
-            box-shadow: 0 0 12px rgba(0,212,255,0.35);
+            border-color: #FFD700;
+            background: rgba(255,215,0,0.2);
+            box-shadow: 0 0 16px rgba(255,215,0,0.4);
+            transform: scale(1.08);
         }
-        .fbtn:active { transform: scale(0.9); }
-        .fbtn .ico { font-size: 1.4rem; line-height: 1; }
-        .fbtn .lbl { font-size: 0.5rem; font-weight: 600; margin-top: 1px; opacity: 0.9; }
+        .fbtn:active { transform: scale(0.92); }
+        .fbtn .ico { font-size: 1.5rem; line-height: 1; }
+        .fbtn .lbl {
+            font-size: 0.5rem;
+            font-weight: 700;
+            margin-top: 1px;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .fbtn .thumb {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            object-position: center 30%;
+        }
+        .fbtn.has-thumb .lbl {
+            position: absolute;
+            bottom: 2px;
+            font-size: 0.45rem;
+            background: rgba(0,0,0,0.6);
+            padding: 1px 6px;
+            border-radius: 8px;
+        }
+        .fbtn.has-thumb {
+            position: relative;
+        }
 
         #mesh-toggle {
             position: absolute;
@@ -155,12 +180,22 @@
         <canvas id="output-canvas"></canvas>
 
         <div id="filter-bar">
-            <button class="fbtn active" data-filter="none"><span class="ico">🚫</span><span class="lbl">None</span></button>
-            <button class="fbtn" data-filter="trump"><span class="ico">🇺🇸</span><span class="lbl">Trump</span></button>
-            <button class="fbtn" data-filter="modi"><span class="ico">🇮🇳</span><span class="lbl">Modi</span></button>
-            <button class="fbtn" data-filter="obama"><span class="ico">🗽</span><span class="lbl">Obama</span></button>
-            <button class="fbtn" data-filter="merkel"><span class="ico">🇩🇪</span><span class="lbl">Merkel</span></button>
-            <button class="fbtn" data-filter="putin"><span class="ico">🇷🇺</span><span class="lbl">Putin</span></button>
+            <button class="fbtn active" data-filter="none">
+                <span class="ico">🚫</span>
+                <span class="lbl">None</span>
+            </button>
+            <button class="fbtn has-thumb" data-filter="serious">
+                <img src="img/brahmi-serious.jpg" class="thumb" alt="Serious">
+                <span class="lbl">Serious</span>
+            </button>
+            <button class="fbtn has-thumb" data-filter="pandit">
+                <img src="img/brahmi-pandit.jpg" class="thumb" alt="Pandit">
+                <span class="lbl">Pandit</span>
+            </button>
+            <button class="fbtn has-thumb" data-filter="shocked">
+                <img src="img/brahmi-shocked.jpg" class="thumb" alt="Shocked">
+                <span class="lbl">Shocked</span>
+            </button>
         </div>
     </div>
 
@@ -179,6 +214,23 @@
 
         var activeFilter = 'none';
         var showMesh = true;
+
+        // --- MASK IMAGE CONFIG ---
+        // cx, cy = face center as fraction of image; fw = face width as fraction of image width
+        var maskConfigs = {
+            serious: { src: 'img/brahmi-serious.jpg', cx: 0.43, cy: 0.42, fw: 0.36 },
+            pandit:  { src: 'img/brahmi-pandit.jpg',  cx: 0.50, cy: 0.64, fw: 0.30 },
+            shocked: { src: 'img/brahmi-shocked.jpg',  cx: 0.48, cy: 0.43, fw: 0.30 }
+        };
+
+        // Preload mask images
+        var maskImages = {};
+        Object.keys(maskConfigs).forEach(function(key) {
+            var img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.src = maskConfigs[key].src;
+            maskImages[key] = img;
+        });
 
         // --- UI HANDLERS ---
         document.querySelectorAll('.fbtn').forEach(function(btn) {
@@ -227,529 +279,83 @@
             var innerBrowDist = dist(face[107], face[336]);
             var innerBrowRatio = innerBrowDist / faceW;
 
-            // Surprised: raised brows + open mouth
             if (browRaise > 0.065 && moRatio > 0.055) {
                 return { emotion: 'Surprised', emoji: '😲', color: '#FFD700' };
             }
-            // Happy: wide smile
             if (mwRatio > 0.43) {
                 return { emotion: 'Happy', emoji: '😊', color: '#4CAF50' };
             }
-            // Angry: furrowed brows + tight mouth
             if (innerBrowRatio < 0.115 && mwRatio < 0.36 && browRaise < 0.04) {
                 return { emotion: 'Angry', emoji: '😠', color: '#F44336' };
             }
-            // Sad: mouth corners down
             if (frownRatio > 0.018) {
                 return { emotion: 'Sad', emoji: '😢', color: '#2196F3' };
             }
             return { emotion: 'Neutral', emoji: '😐', color: '#9E9E9E' };
         }
 
-        // --- FILTER: TRUMP (golden hair + red tie) ---
-        function drawTrump(c, lm, w, h) {
-            var top = pt(lm, 10, w, h);
-            var L = pt(lm, 234, w, h);
-            var R = pt(lm, 454, w, h);
-            var chin = pt(lm, 152, w, h);
-            var fw = R.x - L.x;
-            var fh = chin.y - top.y;
+        // --- FACE MASK OVERLAY ---
+        function drawFaceMask(c, lm, w, h, maskKey) {
+            var config = maskConfigs[maskKey];
+            var img = maskImages[maskKey];
+            if (!img || !img.complete || !img.naturalWidth) return;
 
-            c.save();
+            // User's face bounding points
+            var lf = pt(lm, 234, w, h);
+            var rf = pt(lm, 454, w, h);
+            var tf = pt(lm, 10, w, h);
+            var cf = pt(lm, 152, w, h);
 
-            // Hair body
-            c.beginPath();
-            c.moveTo(L.x - fw * 0.12, top.y + fh * 0.05);
-            c.bezierCurveTo(
-                L.x - fw * 0.05, top.y - fh * 0.28,
-                top.x - fw * 0.15, top.y - fh * 0.42,
-                top.x, top.y - fh * 0.38
-            );
-            c.bezierCurveTo(
-                top.x + fw * 0.25, top.y - fh * 0.5,
-                R.x + fw * 0.15, top.y - fh * 0.22,
-                R.x + fw * 0.12, top.y + fh * 0.05
-            );
-            c.quadraticCurveTo(R.x + fw * 0.02, top.y - fh * 0.02, top.x, top.y - fh * 0.05);
-            c.quadraticCurveTo(L.x - fw * 0.02, top.y - fh * 0.02, L.x - fw * 0.12, top.y + fh * 0.05);
-            c.closePath();
-            var g = c.createLinearGradient(L.x, top.y - fh * 0.45, R.x, top.y);
-            g.addColorStop(0, '#C8961E');
-            g.addColorStop(0.3, '#FFD700');
-            g.addColorStop(0.6, '#FFEC6A');
-            g.addColorStop(1, '#DAA520');
-            c.fillStyle = g;
-            c.fill();
-            c.strokeStyle = '#B8860B';
-            c.lineWidth = 1.5;
-            c.stroke();
+            // User face center and dimensions
+            var ucx = (lf.x + rf.x) / 2;
+            var ucy = (tf.y + cf.y) / 2;
+            var ufw = rf.x - lf.x;
+            var ufh = cf.y - tf.y;
 
-            // Hair wave lines
-            c.strokeStyle = 'rgba(160,120,10,0.35)';
-            c.lineWidth = 1.2;
-            for (var i = 0; i < 7; i++) {
-                var t = (i + 1) / 8;
-                var sx = L.x + fw * t;
-                c.beginPath();
-                c.moveTo(sx, top.y - fh * 0.02);
-                c.quadraticCurveTo(sx + fw * 0.06, top.y - fh * (0.12 + t * 0.2), sx + fw * 0.1, top.y - fh * 0.04);
-                c.stroke();
-            }
-
-            // Side hair
-            c.fillStyle = '#DAA520';
-            c.beginPath();
-            c.moveTo(L.x - fw * 0.12, top.y + fh * 0.05);
-            c.quadraticCurveTo(L.x - fw * 0.18, top.y + fh * 0.2, L.x - fw * 0.08, top.y + fh * 0.3);
-            c.quadraticCurveTo(L.x - fw * 0.02, top.y + fh * 0.2, L.x, top.y + fh * 0.12);
-            c.fill();
-            c.beginPath();
-            c.moveTo(R.x + fw * 0.12, top.y + fh * 0.05);
-            c.quadraticCurveTo(R.x + fw * 0.18, top.y + fh * 0.2, R.x + fw * 0.08, top.y + fh * 0.3);
-            c.quadraticCurveTo(R.x + fw * 0.02, top.y + fh * 0.2, R.x, top.y + fh * 0.12);
-            c.fill();
-
-            // Red tie
-            var tx = chin.x, ty = chin.y + fh * 0.02;
-            c.beginPath();
-            c.moveTo(tx - fw * 0.06, ty);
-            c.lineTo(tx + fw * 0.06, ty);
-            c.lineTo(tx + fw * 0.04, ty + fh * 0.04);
-            c.lineTo(tx, ty + fh * 0.22);
-            c.lineTo(tx - fw * 0.04, ty + fh * 0.04);
-            c.closePath();
-            c.fillStyle = '#CC0000';
-            c.fill();
-            c.strokeStyle = '#880000';
-            c.lineWidth = 1;
-            c.stroke();
-            c.beginPath();
-            c.ellipse(tx, ty + fh * 0.02, fw * 0.04, fw * 0.025, 0, 0, Math.PI * 2);
-            c.fillStyle = '#990000';
-            c.fill();
-
-            c.restore();
-        }
-
-        // --- FILTER: MODI (round glasses + white beard + cap) ---
-        function drawModi(c, lm, w, h) {
-            var top = pt(lm, 10, w, h);
-            var chin = pt(lm, 152, w, h);
-            var L = pt(lm, 234, w, h);
-            var R = pt(lm, 454, w, h);
+            // Face rotation from eye positions
             var lEye = mid(pt(lm, 33, w, h), pt(lm, 133, w, h));
             var rEye = mid(pt(lm, 263, w, h), pt(lm, 362, w, h));
-            var nose = pt(lm, 6, w, h);
-            var fw = R.x - L.x;
-            var fh = chin.y - top.y;
-            var eyeR = fw * 0.14;
+            var angle = Math.atan2(rEye.y - lEye.y, rEye.x - lEye.x);
+
+            // Scale: map source face width to user face width (with padding)
+            var scale = (ufw * 1.35) / (config.fw * img.naturalWidth);
+
+            // Source face center in pixels
+            var scx = config.cx * img.naturalWidth;
+            var scy = config.cy * img.naturalHeight;
+
+            // Ellipse radii for clipping
+            var rx = ufw * 0.72;
+            var ry = ufh * 0.62;
 
             c.save();
 
-            // White cap (Gandhi topi)
-            c.beginPath();
-            c.moveTo(L.x + fw * 0.05, top.y - fh * 0.02);
-            c.quadraticCurveTo(top.x, top.y - fh * 0.35, R.x - fw * 0.05, top.y - fh * 0.02);
-            c.quadraticCurveTo(top.x, top.y - fh * 0.12, L.x + fw * 0.05, top.y - fh * 0.02);
-            c.closePath();
-            c.fillStyle = '#F5F5F0';
-            c.fill();
-            c.strokeStyle = '#CCCCBB';
-            c.lineWidth = 1.5;
-            c.stroke();
-            // Cap band
-            c.beginPath();
-            c.moveTo(L.x + fw * 0.1, top.y - fh * 0.05);
-            c.quadraticCurveTo(top.x, top.y - fh * 0.1, R.x - fw * 0.1, top.y - fh * 0.05);
-            c.strokeStyle = '#DDD5C0';
-            c.lineWidth = 3;
-            c.stroke();
+            // Move to face center, rotate, then clip and draw
+            c.translate(ucx, ucy);
+            c.rotate(angle);
 
-            // Round glasses
-            c.strokeStyle = '#554433';
-            c.lineWidth = 2.5;
+            // Elliptical clip
             c.beginPath();
-            c.arc(lEye.x, lEye.y, eyeR, 0, Math.PI * 2);
-            c.stroke();
-            c.beginPath();
-            c.arc(rEye.x, rEye.y, eyeR, 0, Math.PI * 2);
-            c.stroke();
-            // Bridge
-            c.beginPath();
-            c.moveTo(lEye.x + eyeR, lEye.y);
-            c.quadraticCurveTo(nose.x, nose.y - fh * 0.06, rEye.x - eyeR, rEye.y);
-            c.stroke();
-            // Temples (arms going to ears)
-            c.beginPath();
-            c.moveTo(lEye.x - eyeR, lEye.y);
-            c.lineTo(L.x - fw * 0.05, lEye.y - fh * 0.02);
-            c.stroke();
-            c.beginPath();
-            c.moveTo(rEye.x + eyeR, rEye.y);
-            c.lineTo(R.x + fw * 0.05, rEye.y - fh * 0.02);
-            c.stroke();
-            // Lens tint
-            c.fillStyle = 'rgba(200,200,180,0.12)';
-            c.beginPath(); c.arc(lEye.x, lEye.y, eyeR - 1, 0, Math.PI * 2); c.fill();
-            c.beginPath(); c.arc(rEye.x, rEye.y, eyeR - 1, 0, Math.PI * 2); c.fill();
+            c.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+            c.clip();
 
-            // White beard
-            var mL = pt(lm, 61, w, h);
-            var mR = pt(lm, 291, w, h);
-            var lip = pt(lm, 17, w, h);
-            c.beginPath();
-            c.moveTo(L.x + fw * 0.08, lip.y - fh * 0.02);
-            c.quadraticCurveTo(L.x + fw * 0.02, lip.y + fh * 0.05, L.x + fw * 0.05, chin.y + fh * 0.02);
-            c.quadraticCurveTo(L.x + fw * 0.2, chin.y + fh * 0.12, chin.x, chin.y + fh * 0.14);
-            c.quadraticCurveTo(R.x - fw * 0.2, chin.y + fh * 0.12, R.x - fw * 0.05, chin.y + fh * 0.02);
-            c.quadraticCurveTo(R.x - fw * 0.02, lip.y + fh * 0.05, R.x - fw * 0.08, lip.y - fh * 0.02);
-            c.quadraticCurveTo(chin.x, lip.y + fh * 0.01, L.x + fw * 0.08, lip.y - fh * 0.02);
-            c.closePath();
-            c.fillStyle = '#F0EDE6';
-            c.fill();
-            c.strokeStyle = '#D5D0C5';
-            c.lineWidth = 1;
-            c.stroke();
-            // Beard texture lines
-            c.strokeStyle = 'rgba(180,175,165,0.3)';
-            c.lineWidth = 0.8;
-            for (var i = 0; i < 8; i++) {
-                var t = (i + 1) / 9;
-                var bx = (L.x + fw * 0.1) + (fw * 0.8) * t;
-                c.beginPath();
-                c.moveTo(bx, lip.y + fh * 0.02);
-                c.lineTo(bx + fw * 0.01, chin.y + fh * 0.06);
-                c.stroke();
-            }
+            // Draw mask image centered on face
+            var dw = img.naturalWidth * scale;
+            var dh = img.naturalHeight * scale;
+            var dx = -scx * scale;
+            var dy = -scy * scale;
+            c.drawImage(img, dx, dy, dw, dh);
+
+            // Soft edge: draw a fading ring around the ellipse border
+            var grad = c.createRadialGradient(0, 0, Math.min(rx, ry) * 0.75, 0, 0, Math.max(rx, ry) * 1.05);
+            grad.addColorStop(0, 'rgba(0,0,0,0)');
+            grad.addColorStop(0.6, 'rgba(0,0,0,0)');
+            grad.addColorStop(1, 'rgba(0,0,0,0.6)');
+            c.fillStyle = grad;
+            c.fillRect(-rx * 1.5, -ry * 1.5, rx * 3, ry * 3);
 
             c.restore();
         }
-
-        // --- FILTER: OBAMA (big ears + short hair + HOPE colors) ---
-        function drawObama(c, lm, w, h) {
-            var top = pt(lm, 10, w, h);
-            var chin = pt(lm, 152, w, h);
-            var L = pt(lm, 234, w, h);
-            var R = pt(lm, 454, w, h);
-            var nose = pt(lm, 1, w, h);
-            var fw = R.x - L.x;
-            var fh = chin.y - top.y;
-
-            c.save();
-
-            // Short dark hair
-            c.beginPath();
-            c.moveTo(L.x - fw * 0.05, top.y + fh * 0.08);
-            c.quadraticCurveTo(L.x, top.y - fh * 0.12, top.x - fw * 0.1, top.y - fh * 0.15);
-            c.quadraticCurveTo(top.x, top.y - fh * 0.18, top.x + fw * 0.1, top.y - fh * 0.15);
-            c.quadraticCurveTo(R.x, top.y - fh * 0.12, R.x + fw * 0.05, top.y + fh * 0.08);
-            c.quadraticCurveTo(R.x, top.y + fh * 0.02, top.x, top.y);
-            c.quadraticCurveTo(L.x, top.y + fh * 0.02, L.x - fw * 0.05, top.y + fh * 0.08);
-            c.closePath();
-            c.fillStyle = '#2C1B0E';
-            c.fill();
-
-            // Big ears (left)
-            c.beginPath();
-            var earY = top.y + fh * 0.35;
-            c.ellipse(L.x - fw * 0.15, earY, fw * 0.08, fh * 0.12, -0.15, 0, Math.PI * 2);
-            c.fillStyle = '#C68E6A';
-            c.fill();
-            c.strokeStyle = '#A0704A';
-            c.lineWidth = 2;
-            c.stroke();
-            // Inner ear
-            c.beginPath();
-            c.ellipse(L.x - fw * 0.13, earY, fw * 0.04, fh * 0.07, -0.15, 0, Math.PI * 2);
-            c.fillStyle = '#B57F5A';
-            c.fill();
-
-            // Big ears (right)
-            c.beginPath();
-            c.ellipse(R.x + fw * 0.15, earY, fw * 0.08, fh * 0.12, 0.15, 0, Math.PI * 2);
-            c.fillStyle = '#C68E6A';
-            c.fill();
-            c.strokeStyle = '#A0704A';
-            c.lineWidth = 2;
-            c.stroke();
-            c.beginPath();
-            c.ellipse(R.x + fw * 0.13, earY, fw * 0.04, fh * 0.07, 0.15, 0, Math.PI * 2);
-            c.fillStyle = '#B57F5A';
-            c.fill();
-
-            // HOPE-style color bands overlay
-            c.globalAlpha = 0.2;
-            // Blue on upper face
-            c.fillStyle = '#004494';
-            c.beginPath();
-            c.ellipse(nose.x, top.y + fh * 0.25, fw * 0.5, fh * 0.25, 0, 0, Math.PI * 2);
-            c.fill();
-            // Red on lower face
-            c.fillStyle = '#BF0A30';
-            c.beginPath();
-            c.ellipse(nose.x, chin.y - fh * 0.15, fw * 0.45, fh * 0.22, 0, 0, Math.PI * 2);
-            c.fill();
-            c.globalAlpha = 1.0;
-
-            // "HOPE" text below chin
-            c.font = 'bold ' + Math.round(fh * 0.1) + 'px "Impact", Arial';
-            c.textAlign = 'center';
-            c.fillStyle = '#004494';
-            c.strokeStyle = '#FFFFFF';
-            c.lineWidth = 2;
-            c.strokeText('HOPE', chin.x, chin.y + fh * 0.18);
-            c.fillText('HOPE', chin.x, chin.y + fh * 0.18);
-
-            c.restore();
-        }
-
-        // --- FILTER: MERKEL (bob hair + pearl necklace + diamond hands) ---
-        function drawMerkel(c, lm, w, h) {
-            var top = pt(lm, 10, w, h);
-            var chin = pt(lm, 152, w, h);
-            var L = pt(lm, 234, w, h);
-            var R = pt(lm, 454, w, h);
-            var fw = R.x - L.x;
-            var fh = chin.y - top.y;
-
-            c.save();
-
-            // Bob haircut
-            c.beginPath();
-            // Top of hair
-            c.moveTo(L.x - fw * 0.15, top.y + fh * 0.15);
-            c.quadraticCurveTo(L.x - fw * 0.1, top.y - fh * 0.18, top.x - fw * 0.05, top.y - fh * 0.2);
-            c.quadraticCurveTo(top.x, top.y - fh * 0.22, top.x + fw * 0.05, top.y - fh * 0.2);
-            c.quadraticCurveTo(R.x + fw * 0.1, top.y - fh * 0.18, R.x + fw * 0.15, top.y + fh * 0.15);
-            // Right side curves in at jaw
-            c.quadraticCurveTo(R.x + fw * 0.18, top.y + fh * 0.45, R.x + fw * 0.05, top.y + fh * 0.55);
-            c.quadraticCurveTo(R.x - fw * 0.05, top.y + fh * 0.58, R.x - fw * 0.1, top.y + fh * 0.5);
-            // Bottom across back of head (hidden, just close path)
-            c.quadraticCurveTo(top.x, top.y + fh * 0.08, L.x + fw * 0.1, top.y + fh * 0.5);
-            c.quadraticCurveTo(L.x + fw * 0.05, top.y + fh * 0.58, L.x - fw * 0.05, top.y + fh * 0.55);
-            c.quadraticCurveTo(L.x - fw * 0.18, top.y + fh * 0.45, L.x - fw * 0.15, top.y + fh * 0.15);
-            c.closePath();
-            var hg = c.createLinearGradient(L.x, top.y - fh * 0.2, R.x, chin.y);
-            hg.addColorStop(0, '#8B7355');
-            hg.addColorStop(0.4, '#A08868');
-            hg.addColorStop(1, '#7A6548');
-            c.fillStyle = hg;
-            c.fill();
-            c.strokeStyle = '#6B5540';
-            c.lineWidth = 1.5;
-            c.stroke();
-
-            // Hair detail lines
-            c.strokeStyle = 'rgba(90,70,50,0.3)';
-            c.lineWidth = 1;
-            for (var i = 0; i < 8; i++) {
-                var t = (i + 1) / 9;
-                var hx = L.x + fw * t;
-                c.beginPath();
-                c.moveTo(hx, top.y - fh * 0.12);
-                c.quadraticCurveTo(hx + fw * 0.02, top.y + fh * 0.15, hx - fw * 0.02, top.y + fh * 0.4);
-                c.stroke();
-            }
-
-            // Pearl necklace
-            var neckY = chin.y + fh * 0.06;
-            var pearlCount = 12;
-            var pearlR = fw * 0.025;
-            c.fillStyle = '#F5F0E8';
-            c.strokeStyle = '#D5D0C5';
-            c.lineWidth = 0.5;
-            for (var i = 0; i < pearlCount; i++) {
-                var angle = Math.PI * 0.15 + (Math.PI * 0.7) * (i / (pearlCount - 1));
-                var px = chin.x + Math.cos(angle) * fw * 0.4;
-                var py = neckY + Math.sin(angle) * fh * 0.08;
-                c.beginPath();
-                c.arc(px, py, pearlR, 0, Math.PI * 2);
-                c.fill();
-                c.stroke();
-                // Pearl shine
-                c.beginPath();
-                c.arc(px - pearlR * 0.3, py - pearlR * 0.3, pearlR * 0.3, 0, Math.PI * 2);
-                c.fillStyle = 'rgba(255,255,255,0.5)';
-                c.fill();
-                c.fillStyle = '#F5F0E8';
-            }
-
-            // Merkel-Raute (diamond hand gesture) drawn as icon below
-            var dY = chin.y + fh * 0.3;
-            var dSize = fw * 0.12;
-            c.beginPath();
-            c.moveTo(chin.x, dY - dSize);
-            c.lineTo(chin.x + dSize, dY);
-            c.lineTo(chin.x, dY + dSize);
-            c.lineTo(chin.x - dSize, dY);
-            c.closePath();
-            c.fillStyle = 'rgba(255,215,0,0.3)';
-            c.fill();
-            c.strokeStyle = '#FFD700';
-            c.lineWidth = 2;
-            c.stroke();
-            // Finger lines
-            c.strokeStyle = '#D4A574';
-            c.lineWidth = 3;
-            c.beginPath();
-            c.moveTo(chin.x - dSize * 1.2, dY + dSize * 0.5);
-            c.quadraticCurveTo(chin.x - dSize * 0.3, dY - dSize * 0.2, chin.x, dY - dSize);
-            c.stroke();
-            c.beginPath();
-            c.moveTo(chin.x + dSize * 1.2, dY + dSize * 0.5);
-            c.quadraticCurveTo(chin.x + dSize * 0.3, dY - dSize * 0.2, chin.x, dY - dSize);
-            c.stroke();
-
-            c.restore();
-        }
-
-        // --- FILTER: PUTIN (aviator sunglasses + ushanka fur hat) ---
-        function drawPutin(c, lm, w, h) {
-            var top = pt(lm, 10, w, h);
-            var chin = pt(lm, 152, w, h);
-            var L = pt(lm, 234, w, h);
-            var R = pt(lm, 454, w, h);
-            var lEye = mid(pt(lm, 33, w, h), pt(lm, 133, w, h));
-            var rEye = mid(pt(lm, 263, w, h), pt(lm, 362, w, h));
-            var nose = pt(lm, 6, w, h);
-            var fw = R.x - L.x;
-            var fh = chin.y - top.y;
-
-            c.save();
-
-            // Ushanka fur hat
-            // Main hat body
-            c.beginPath();
-            c.moveTo(L.x - fw * 0.2, top.y + fh * 0.05);
-            c.quadraticCurveTo(L.x - fw * 0.15, top.y - fh * 0.3, top.x, top.y - fh * 0.35);
-            c.quadraticCurveTo(R.x + fw * 0.15, top.y - fh * 0.3, R.x + fw * 0.2, top.y + fh * 0.05);
-            c.lineTo(R.x + fw * 0.2, top.y + fh * 0.1);
-            c.lineTo(L.x - fw * 0.2, top.y + fh * 0.1);
-            c.closePath();
-            c.fillStyle = '#4A4A4A';
-            c.fill();
-            c.strokeStyle = '#333';
-            c.lineWidth = 1.5;
-            c.stroke();
-
-            // Hat star emblem
-            var starX = top.x, starY = top.y - fh * 0.18;
-            var sr = fh * 0.05;
-            c.fillStyle = '#CC0000';
-            c.beginPath();
-            for (var i = 0; i < 5; i++) {
-                var a = -Math.PI / 2 + (i * 2 * Math.PI / 5);
-                var a2 = a + Math.PI / 5;
-                c.lineTo(starX + Math.cos(a) * sr, starY + Math.sin(a) * sr);
-                c.lineTo(starX + Math.cos(a2) * sr * 0.4, starY + Math.sin(a2) * sr * 0.4);
-            }
-            c.closePath();
-            c.fill();
-
-            // Fur trim (scalloped edge)
-            c.fillStyle = '#8B7D6B';
-            var trimY = top.y + fh * 0.05;
-            var trimH = fh * 0.1;
-            c.beginPath();
-            c.moveTo(L.x - fw * 0.22, trimY);
-            for (var i = 0; i <= 14; i++) {
-                var t = i / 14;
-                var bx = (L.x - fw * 0.22) + (fw * 1.44) * t;
-                var by = trimY + trimH * (0.5 + 0.5 * Math.sin(i * Math.PI * 1.2));
-                if (i === 0) c.moveTo(bx, trimY);
-                c.quadraticCurveTo(bx, by + trimH * 0.3, bx + fw * 0.05, by);
-            }
-            c.lineTo(R.x + fw * 0.22, trimY);
-            c.lineTo(L.x - fw * 0.22, trimY);
-            c.closePath();
-            c.fill();
-            c.strokeStyle = '#6B5D4B';
-            c.lineWidth = 1;
-            c.stroke();
-
-            // Ear flaps
-            c.fillStyle = '#4A4A4A';
-            // Left flap
-            c.beginPath();
-            c.moveTo(L.x - fw * 0.18, trimY);
-            c.quadraticCurveTo(L.x - fw * 0.28, trimY + fh * 0.15, L.x - fw * 0.22, trimY + fh * 0.35);
-            c.quadraticCurveTo(L.x - fw * 0.15, trimY + fh * 0.38, L.x - fw * 0.08, trimY + fh * 0.3);
-            c.quadraticCurveTo(L.x - fw * 0.05, trimY + fh * 0.15, L.x - fw * 0.05, trimY);
-            c.closePath();
-            c.fill();
-            c.stroke();
-            // Left flap fur
-            c.fillStyle = '#8B7D6B';
-            c.beginPath();
-            c.ellipse(L.x - fw * 0.15, trimY + fh * 0.3, fw * 0.06, fh * 0.04, 0, 0, Math.PI * 2);
-            c.fill();
-            // Right flap
-            c.fillStyle = '#4A4A4A';
-            c.beginPath();
-            c.moveTo(R.x + fw * 0.18, trimY);
-            c.quadraticCurveTo(R.x + fw * 0.28, trimY + fh * 0.15, R.x + fw * 0.22, trimY + fh * 0.35);
-            c.quadraticCurveTo(R.x + fw * 0.15, trimY + fh * 0.38, R.x + fw * 0.08, trimY + fh * 0.3);
-            c.quadraticCurveTo(R.x + fw * 0.05, trimY + fh * 0.15, R.x + fw * 0.05, trimY);
-            c.closePath();
-            c.fill();
-            c.stroke();
-            c.fillStyle = '#8B7D6B';
-            c.beginPath();
-            c.ellipse(R.x + fw * 0.15, trimY + fh * 0.3, fw * 0.06, fh * 0.04, 0, 0, Math.PI * 2);
-            c.fill();
-
-            // Aviator sunglasses
-            var glassW = fw * 0.22;
-            var glassH = fh * 0.14;
-            c.fillStyle = 'rgba(10,10,10,0.75)';
-            c.strokeStyle = '#666';
-            c.lineWidth = 2.5;
-            // Left lens (teardrop aviator)
-            c.beginPath();
-            c.moveTo(lEye.x - glassW * 0.1, lEye.y - glassH * 0.5);
-            c.quadraticCurveTo(lEye.x + glassW, lEye.y - glassH * 0.6, lEye.x + glassW * 0.8, lEye.y);
-            c.quadraticCurveTo(lEye.x + glassW * 0.6, lEye.y + glassH * 0.8, lEye.x, lEye.y + glassH * 0.6);
-            c.quadraticCurveTo(lEye.x - glassW * 0.5, lEye.y + glassH * 0.5, lEye.x - glassW * 0.4, lEye.y);
-            c.quadraticCurveTo(lEye.x - glassW * 0.3, lEye.y - glassH * 0.4, lEye.x - glassW * 0.1, lEye.y - glassH * 0.5);
-            c.closePath();
-            c.fill();
-            c.stroke();
-            // Right lens
-            c.beginPath();
-            c.moveTo(rEye.x + glassW * 0.1, rEye.y - glassH * 0.5);
-            c.quadraticCurveTo(rEye.x - glassW, rEye.y - glassH * 0.6, rEye.x - glassW * 0.8, rEye.y);
-            c.quadraticCurveTo(rEye.x - glassW * 0.6, rEye.y + glassH * 0.8, rEye.x, rEye.y + glassH * 0.6);
-            c.quadraticCurveTo(rEye.x + glassW * 0.5, rEye.y + glassH * 0.5, rEye.x + glassW * 0.4, rEye.y);
-            c.quadraticCurveTo(rEye.x + glassW * 0.3, rEye.y - glassH * 0.4, rEye.x + glassW * 0.1, rEye.y - glassH * 0.5);
-            c.closePath();
-            c.fill();
-            c.stroke();
-            // Bridge
-            c.beginPath();
-            c.moveTo(lEye.x + glassW * 0.3, lEye.y - glassH * 0.3);
-            c.quadraticCurveTo(nose.x, nose.y - fh * 0.08, rEye.x - glassW * 0.3, rEye.y - glassH * 0.3);
-            c.stroke();
-            // Lens reflection
-            c.strokeStyle = 'rgba(255,255,255,0.15)';
-            c.lineWidth = 1.5;
-            c.beginPath();
-            c.arc(lEye.x + glassW * 0.15, lEye.y - glassH * 0.1, glassW * 0.2, Math.PI * 1.2, Math.PI * 1.7);
-            c.stroke();
-            c.beginPath();
-            c.arc(rEye.x - glassW * 0.15, rEye.y - glassH * 0.1, glassW * 0.2, Math.PI * 1.2, Math.PI * 1.7);
-            c.stroke();
-
-            c.restore();
-        }
-
-        // --- DISPATCH FILTER ---
-        var filterFns = {
-            trump: drawTrump,
-            modi: drawModi,
-            obama: drawObama,
-            merkel: drawMerkel,
-            putin: drawPutin
-        };
 
         // --- MEDIAPIPE SETUP ---
         var holistic = new Holistic({
@@ -805,9 +411,9 @@
                 drawLandmarks(ctx, results.rightHandLandmarks, { color: '#00FF00', lineWidth: 2, radius: 2 });
             }
 
-            // Draw politician filter
-            if (activeFilter !== 'none' && results.faceLandmarks && filterFns[activeFilter]) {
-                filterFns[activeFilter](ctx, results.faceLandmarks, w, h);
+            // Draw face mask filter (in mirrored space so it tracks the face)
+            if (activeFilter !== 'none' && results.faceLandmarks) {
+                drawFaceMask(ctx, results.faceLandmarks, w, h, activeFilter);
             }
 
             // Flip back for UI overlays
