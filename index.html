@@ -3,90 +3,164 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Brahmi Face Warp + Emotions</title>
+    <title>Emotion Detector + Face Filters</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            display: flex; justify-content: center; align-items: center;
-            min-height: 100vh; background: #1a1a2e; color: white;
-            font-family: 'Segoe UI', Arial, sans-serif; overflow: hidden;
-            -webkit-user-select: none; user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #1a1a2e;
+            color: white;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+            -webkit-user-select: none;
+            user-select: none;
         }
-        .container { position: relative; width: 100vw; height: 100vh; }
-        #output-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        #output-canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
         #webcam-video { display: none; }
+
         #emotion-bar {
-            position: absolute; top: 0; left: 0; right: 0; z-index: 10;
-            display: flex; align-items: center; justify-content: center;
-            padding: 14px 16px; background: linear-gradient(to bottom, rgba(0,0,0,0.6), transparent);
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 14px 16px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%);
             pointer-events: none;
         }
         #emotion-pill {
-            display: inline-flex; align-items: center; gap: 8px;
-            padding: 6px 18px; border-radius: 30px; font-size: 1.2rem; font-weight: 700;
-            background: rgba(0,0,0,0.5); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            border: 2px solid rgba(255,255,255,0.15); transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 18px;
+            border-radius: 30px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 2px solid rgba(255,255,255,0.15);
+            transition: all 0.3s ease;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.5);
         }
         #emotion-emoji { font-size: 1.5rem; }
+
         #filter-bar {
-            position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
-            display: flex; align-items: center; gap: 14px;
-            padding: 14px 12px 24px; background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 12px 20px;
+            background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%);
+            overflow-x: auto;
             justify-content: center;
+            flex-wrap: nowrap;
+            scrollbar-width: none;
         }
+        #filter-bar::-webkit-scrollbar { display: none; }
         .fbtn {
-            flex-shrink: 0; width: 68px; height: 68px; border-radius: 50%;
-            border: 3px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.08);
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: white;
-            cursor: pointer; display: flex; flex-direction: column; align-items: center;
-            justify-content: center; transition: all 0.2s ease;
-            -webkit-tap-highlight-color: transparent; overflow: hidden; padding: 0; position: relative;
+            flex-shrink: 0;
+            width: 58px; height: 58px;
+            border-radius: 50%;
+            border: 3px solid rgba(255,255,255,0.25);
+            background: rgba(255,255,255,0.08);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            -webkit-tap-highlight-color: transparent;
         }
-        .fbtn.active { border-color: #FFD700; background: rgba(255,215,0,0.2); box-shadow: 0 0 16px rgba(255,215,0,0.4); transform: scale(1.08); }
-        .fbtn:active { transform: scale(0.92); }
-        .fbtn .ico { font-size: 1.5rem; }
-        .fbtn .lbl { font-size: 0.5rem; font-weight: 700; margin-top: 1px; text-transform: uppercase; }
-        .fbtn .thumb { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: center 30%; }
-        .fbtn.has-thumb .lbl { position: absolute; bottom: 2px; font-size: 0.45rem; background: rgba(0,0,0,0.65); padding: 1px 6px; border-radius: 8px; }
+        .fbtn.active {
+            border-color: #00d4ff;
+            background: rgba(0,212,255,0.25);
+            box-shadow: 0 0 12px rgba(0,212,255,0.35);
+        }
+        .fbtn:active { transform: scale(0.9); }
+        .fbtn .ico { font-size: 1.4rem; line-height: 1; }
+        .fbtn .lbl { font-size: 0.5rem; font-weight: 600; margin-top: 1px; opacity: 0.9; }
+
         #mesh-toggle {
-            position: absolute; top: 12px; right: 12px; z-index: 10;
-            width: 42px; height: 42px; border-radius: 50%;
-            border: 2px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.08);
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: white;
-            font-size: 1.1rem; cursor: pointer; display: flex; align-items: center;
-            justify-content: center; -webkit-tap-highlight-color: transparent; transition: all 0.2s ease;
+            position: absolute;
+            top: 12px; right: 12px;
+            z-index: 10;
+            width: 42px; height: 42px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.25);
+            background: rgba(255,255,255,0.08);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: white;
+            font-size: 1.1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+            transition: all 0.2s ease;
         }
-        #mesh-toggle.active { border-color: #00d4ff; background: rgba(0,212,255,0.25); }
+        #mesh-toggle.active {
+            border-color: #00d4ff;
+            background: rgba(0,212,255,0.25);
+        }
+
         #loading-message {
-            position: absolute; z-index: 20; top: 50%; left: 50%;
-            transform: translate(-50%, -50%); font-size: 1.1rem; font-weight: bold;
-            text-align: center; padding: 20px; line-height: 1.6;
+            position: absolute;
+            z-index: 20;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-align: center;
+            padding: 20px;
         }
-        .loading-spinner {
-            display: inline-block; width: 28px; height: 28px; border: 3px solid rgba(255,255,255,0.2);
-            border-top-color: #FFD700; border-radius: 50%;
-            animation: spin 0.8s linear infinite; margin-bottom: 10px;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <div class="container">
-        <div id="loading-message"><div class="loading-spinner"></div><br>Loading model...</div>
+        <div id="loading-message">Requesting Camera Access...</div>
+
         <div id="emotion-bar">
             <div id="emotion-pill">
                 <span id="emotion-emoji">😐</span>
                 <span id="emotion-label">Neutral</span>
             </div>
         </div>
-        <button id="mesh-toggle" title="Toggle mesh">🕸</button>
+
+        <button id="mesh-toggle" title="Toggle face mesh">🕸</button>
+
         <video id="webcam-video" autoplay playsinline></video>
         <canvas id="output-canvas"></canvas>
+
         <div id="filter-bar">
             <button class="fbtn active" data-filter="none"><span class="ico">🚫</span><span class="lbl">None</span></button>
-            <button class="fbtn has-thumb" data-filter="serious"><img src="img/brahmi-serious.jpg" class="thumb"><span class="lbl">Serious</span></button>
-            <button class="fbtn has-thumb" data-filter="pandit"><img src="img/brahmi-pandit.jpg" class="thumb"><span class="lbl">Pandit</span></button>
-            <button class="fbtn has-thumb" data-filter="shocked"><img src="img/brahmi-shocked.jpg" class="thumb"><span class="lbl">Shocked</span></button>
+            <button class="fbtn" data-filter="trump"><span class="ico">🇺🇸</span><span class="lbl">Trump</span></button>
+            <button class="fbtn" data-filter="modi"><span class="ico">🇮🇳</span><span class="lbl">Modi</span></button>
+            <button class="fbtn" data-filter="obama"><span class="ico">🗽</span><span class="lbl">Obama</span></button>
+            <button class="fbtn" data-filter="merkel"><span class="ico">🇩🇪</span><span class="lbl">Merkel</span></button>
+            <button class="fbtn" data-filter="putin"><span class="ico">🇷🇺</span><span class="lbl">Putin</span></button>
         </div>
     </div>
 
@@ -95,324 +169,681 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
 
     <script>
-    var videoEl = document.getElementById('webcam-video');
-    var canvas = document.getElementById('output-canvas');
-    var ctx = canvas.getContext('2d');
-    var loadMsg = document.getElementById('loading-message');
-    var emoPill = document.getElementById('emotion-pill');
-    var emoEmoji = document.getElementById('emotion-emoji');
-    var emoLabel = document.getElementById('emotion-label');
+        var videoElement = document.getElementById('webcam-video');
+        var canvasElement = document.getElementById('output-canvas');
+        var ctx = canvasElement.getContext('2d');
+        var loadingMessage = document.getElementById('loading-message');
+        var emotionEmoji = document.getElementById('emotion-emoji');
+        var emotionLabel = document.getElementById('emotion-label');
+        var emotionPill = document.getElementById('emotion-pill');
 
-    var activeFilter = 'none';
-    var showMesh = true;
-    var triangles = null;
+        var activeFilter = 'none';
+        var showMesh = true;
 
-    var warpCvs = document.createElement('canvas');
-    var warpCtx = warpCvs.getContext('2d');
-
-    var KEY = [
-        10, 67, 109, 234, 132, 58, 172, 152, 397, 288, 361, 454, 338, 297,
-        33, 159, 145, 133, 263, 386, 374, 362,
-        70, 105, 300, 334,
-        1, 6, 168,
-        61, 37, 0, 267, 291, 405, 17, 181,
-        78, 82, 13, 312, 308, 317, 14, 87,
-        205, 425, 151
-    ];
-
-    var masks = {
-        serious: { src: 'img/brahmi-serious.jpg', pts: null },
-        pandit:  { src: 'img/brahmi-pandit.jpg',  pts: null },
-        shocked: { src: 'img/brahmi-shocked.jpg',  pts: null }
-    };
-    var maskImgs = {};
-    Object.keys(masks).forEach(function(k) {
-        var im = new Image();
-        im.crossOrigin = 'anonymous';
-        im.src = masks[k].src;
-        maskImgs[k] = im;
-    });
-
-    var dstBuf = KEY.map(function() { return { x: 0, y: 0 }; });
-
-    document.querySelectorAll('.fbtn').forEach(function(b) {
-        b.addEventListener('click', function() {
-            document.querySelector('.fbtn.active').classList.remove('active');
-            b.classList.add('active');
-            activeFilter = b.dataset.filter;
-        });
-    });
-    document.getElementById('mesh-toggle').addEventListener('click', function() {
-        showMesh = !showMesh;
-        this.classList.toggle('active');
-    });
-
-    function d(a, b) { var dx = a.x - b.x, dy = a.y - b.y; return Math.sqrt(dx * dx + dy * dy); }
-
-    function detectEmotion(f) {
-        if (!f) return { e: 'No Face', m: '👻', c: '#888' };
-        var fw = d(f[234], f[454]), fh = d(f[10], f[152]);
-        var mw = d(f[61], f[291]) / fw, mo = d(f[13], f[14]) / fh;
-        var fr = ((f[61].y + f[291].y) / 2 - f[14].y) / fh;
-        var br = (f[159].y - f[105].y + f[386].y - f[334].y) / (2 * fh);
-        var ib = d(f[107], f[336]) / fw;
-        if (br > 0.065 && mo > 0.055) return { e: 'Surprised', m: '😲', c: '#FFD700' };
-        if (mw > 0.43) return { e: 'Happy', m: '😊', c: '#4CAF50' };
-        if (ib < 0.115 && mw < 0.36 && br < 0.04) return { e: 'Angry', m: '😠', c: '#F44336' };
-        if (fr > 0.018) return { e: 'Sad', m: '😢', c: '#2196F3' };
-        return { e: 'Neutral', m: '😐', c: '#9E9E9E' };
-    }
-
-    // --- Delaunay triangulation (Bowyer-Watson) ---
-    function circumTest(p, a, b, c) {
-        var ax = a.x - p.x, ay = a.y - p.y;
-        var bx = b.x - p.x, by = b.y - p.y;
-        var cx = c.x - p.x, cy = c.y - p.y;
-        var det = (ax * ax + ay * ay) * (bx * cy - cx * by)
-                - (bx * bx + by * by) * (ax * cy - cx * ay)
-                + (cx * cx + cy * cy) * (ax * by - bx * ay);
-        var area = (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y);
-        if (Math.abs(area) < 1e-10) return false;
-        return area > 0 ? det > 0 : det < 0;
-    }
-
-    function computeDelaunay(pts) {
-        var n = pts.length;
-        if (n < 3) return [];
-        var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
-        for (var i = 0; i < n; i++) {
-            if (pts[i].x < minX) minX = pts[i].x;
-            if (pts[i].y < minY) minY = pts[i].y;
-            if (pts[i].x > maxX) maxX = pts[i].x;
-            if (pts[i].y > maxY) maxY = pts[i].y;
-        }
-        var dm = Math.max(maxX - minX, maxY - minY) || 1;
-        var mx = (minX + maxX) / 2, my = (minY + maxY) / 2;
-        var all = pts.concat([
-            { x: mx - 20 * dm, y: my - dm },
-            { x: mx, y: my + 20 * dm },
-            { x: mx + 20 * dm, y: my - dm }
-        ]);
-        var tris = [[n, n + 1, n + 2]];
-        for (var i = 0; i < n; i++) {
-            var p = all[i], bad = [];
-            for (var j = 0; j < tris.length; j++) {
-                if (circumTest(p, all[tris[j][0]], all[tris[j][1]], all[tris[j][2]])) bad.push(j);
-            }
-            var edges = [];
-            for (var j = 0; j < bad.length; j++) {
-                var t = tris[bad[j]];
-                edges.push([t[0], t[1]], [t[1], t[2]], [t[2], t[0]]);
-            }
-            var bnd = [];
-            for (var j = 0; j < edges.length; j++) {
-                var dup = false;
-                for (var k = 0; k < edges.length; k++) {
-                    if (j !== k && edges[j][0] === edges[k][1] && edges[j][1] === edges[k][0]) { dup = true; break; }
-                }
-                if (!dup) bnd.push(edges[j]);
-            }
-            bad.sort(function(a, b) { return b - a; });
-            for (var j = 0; j < bad.length; j++) tris.splice(bad[j], 1);
-            for (var j = 0; j < bnd.length; j++) tris.push([i, bnd[j][0], bnd[j][1]]);
-        }
-        return tris.filter(function(t) { return t[0] < n && t[1] < n && t[2] < n; });
-    }
-
-    // --- Affine warp per triangle ---
-    function warpTri(c, img, s, dst) {
-        var sa = (s[1].x - s[0].x) * (s[2].y - s[0].y) - (s[2].x - s[0].x) * (s[1].y - s[0].y);
-        if (Math.abs(sa) < 0.5) return;
-        c.save();
-        c.beginPath();
-        c.moveTo(dst[0].x, dst[0].y);
-        c.lineTo(dst[1].x, dst[1].y);
-        c.lineTo(dst[2].x, dst[2].y);
-        c.closePath();
-        c.clip();
-        var x0 = s[0].x, y0 = s[0].y, x1 = s[1].x, y1 = s[1].y, x2 = s[2].x, y2 = s[2].y;
-        var u0 = dst[0].x, v0 = dst[0].y, u1 = dst[1].x, v1 = dst[1].y, u2 = dst[2].x, v2 = dst[2].y;
-        var det = x0 * (y1 - y2) + x1 * (y2 - y0) + x2 * (y0 - y1);
-        if (Math.abs(det) < 0.01) { c.restore(); return; }
-        var a = (u0 * (y1 - y2) + u1 * (y2 - y0) + u2 * (y0 - y1)) / det;
-        var b = (v0 * (y1 - y2) + v1 * (y2 - y0) + v2 * (y0 - y1)) / det;
-        var cc = (u0 * (x2 - x1) + u1 * (x0 - x2) + u2 * (x1 - x0)) / det;
-        var dd = (v0 * (x2 - x1) + v1 * (x0 - x2) + v2 * (x1 - x0)) / det;
-        var e = u0 - a * x0 - cc * y0;
-        var f = v0 - b * x0 - dd * y0;
-        c.setTransform(a, b, cc, dd, e, f);
-        c.drawImage(img, 0, 0);
-        c.restore();
-    }
-
-    // --- Draw warped face ---
-    function drawWarped(mainCtx, key, userLm, w, h) {
-        var cfg = masks[key];
-        if (!cfg.pts || !triangles) return;
-        var img = maskImgs[key];
-        if (!img || !img.complete) return;
-
-        for (var i = 0; i < KEY.length; i++) {
-            dstBuf[i].x = w - userLm[KEY[i]].x * w;
-            dstBuf[i].y = userLm[KEY[i]].y * h;
-        }
-
-        if (warpCvs.width !== w) warpCvs.width = w;
-        if (warpCvs.height !== h) warpCvs.height = h;
-        warpCtx.setTransform(1, 0, 0, 1, 0, 0);
-        warpCtx.globalCompositeOperation = 'source-over';
-        warpCtx.clearRect(0, 0, w, h);
-
-        var sp = cfg.pts;
-        for (var i = 0; i < triangles.length; i++) {
-            var t = triangles[i];
-            warpTri(warpCtx, img,
-                [sp[t[0]], sp[t[1]], sp[t[2]]],
-                [dstBuf[t[0]], dstBuf[t[1]], dstBuf[t[2]]]
-            );
-        }
-
-        var cx = 0, cy = 0, mnX = 1e9, mxX = -1e9, mnY = 1e9, mxY = -1e9;
-        for (var i = 0; i < dstBuf.length; i++) {
-            cx += dstBuf[i].x; cy += dstBuf[i].y;
-            if (dstBuf[i].x < mnX) mnX = dstBuf[i].x;
-            if (dstBuf[i].x > mxX) mxX = dstBuf[i].x;
-            if (dstBuf[i].y < mnY) mnY = dstBuf[i].y;
-            if (dstBuf[i].y > mxY) mxY = dstBuf[i].y;
-        }
-        cx /= dstBuf.length; cy /= dstBuf.length;
-        var rx = (mxX - mnX) / 2 * 1.05, ry = (mxY - mnY) / 2 * 1.05;
-        var r = Math.max(rx, ry);
-
-        warpCtx.globalCompositeOperation = 'destination-in';
-        warpCtx.save();
-        warpCtx.setTransform(1, 0, 0, 1, 0, 0);
-        warpCtx.translate(cx, cy);
-        if (rx !== ry) warpCtx.scale(rx / r, ry / r);
-        var g = warpCtx.createRadialGradient(0, 0, r * 0.6, 0, 0, r);
-        g.addColorStop(0, 'rgba(0,0,0,1)');
-        g.addColorStop(0.75, 'rgba(0,0,0,0.85)');
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        warpCtx.fillStyle = g;
-        warpCtx.fillRect(-r * 2, -r * 2, r * 4, r * 4);
-        warpCtx.restore();
-        warpCtx.globalCompositeOperation = 'source-over';
-
-        mainCtx.save();
-        mainCtx.setTransform(1, 0, 0, 1, 0, 0);
-        mainCtx.drawImage(warpCvs, 0, 0);
-        mainCtx.restore();
-    }
-
-    // --- MediaPipe Holistic ---
-    var holistic = new Holistic({
-        locateFile: function(f) { return 'https://cdn.jsdelivr.net/npm/@mediapipe/holistic/' + f; }
-    });
-    holistic.setOptions({
-        static_image_mode: true,
-        model_complexity: 1,
-        smooth_landmarks: true,
-        refine_face_landmarks: true,
-        min_detection_confidence: 0.5,
-        min_tracking_confidence: 0.5
-    });
-
-    // --- Init: detect landmarks on source images, then start camera ---
-    function waitImages(cb) {
-        var keys = Object.keys(masks), done = 0, total = keys.length;
-        function check() { if (++done >= total) cb(); }
-        keys.forEach(function(k) {
-            var im = maskImgs[k];
-            if (im.complete && im.naturalWidth) check();
-            else { im.onload = check; im.onerror = check; }
-        });
-    }
-
-    function processSources() {
-        var keys = Object.keys(masks), idx = 0;
-        function next() {
-            if (idx >= keys.length) { finishInit(); return; }
-            var k = keys[idx];
-            loadMsg.innerHTML = '<div class="loading-spinner"></div><br>Analyzing face ' + (idx + 1) + '/' + keys.length + '...';
-            holistic.onResults(function(res) {
-                if (res.faceLandmarks) {
-                    var iw = maskImgs[k].naturalWidth, ih = maskImgs[k].naturalHeight;
-                    masks[k].pts = KEY.map(function(li) {
-                        return { x: res.faceLandmarks[li].x * iw, y: res.faceLandmarks[li].y * ih };
-                    });
-                }
-                idx++;
-                next();
+        // --- UI HANDLERS ---
+        document.querySelectorAll('.fbtn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                document.querySelector('.fbtn.active').classList.remove('active');
+                btn.classList.add('active');
+                activeFilter = btn.dataset.filter;
             });
-            holistic.send({ image: maskImgs[k] });
+        });
+        document.getElementById('mesh-toggle').addEventListener('click', function() {
+            showMesh = !showMesh;
+            this.classList.toggle('active');
+        });
+
+        // --- UTILITY ---
+        function dist(a, b) {
+            var dx = a.x - b.x, dy = a.y - b.y;
+            return Math.sqrt(dx * dx + dy * dy);
         }
-        next();
-    }
+        function pt(lm, i, w, h) {
+            return { x: lm[i].x * w, y: lm[i].y * h };
+        }
+        function mid(a, b) {
+            return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        }
 
-    function finishInit() {
-        var fk = Object.keys(masks).find(function(k) { return masks[k].pts; });
-        if (fk) triangles = computeDelaunay(masks[fk].pts);
+        // --- EMOTION DETECTION (5 emotions) ---
+        function detectEmotion(face) {
+            if (!face) return { emotion: 'No Face', emoji: '👻', color: '#888' };
 
-        holistic.setOptions({ static_image_mode: false });
+            var faceW = dist(face[234], face[454]);
+            var faceH = dist(face[10], face[152]);
+
+            var mouthW = dist(face[61], face[291]);
+            var mouthOpen = dist(face[13], face[14]);
+            var mwRatio = mouthW / faceW;
+            var moRatio = mouthOpen / faceH;
+
+            var avgCornerY = (face[61].y + face[291].y) / 2;
+            var frownRatio = (avgCornerY - face[14].y) / faceH;
+
+            var lBrow = face[159].y - face[105].y;
+            var rBrow = face[386].y - face[334].y;
+            var browRaise = (lBrow + rBrow) / (2 * faceH);
+
+            var innerBrowDist = dist(face[107], face[336]);
+            var innerBrowRatio = innerBrowDist / faceW;
+
+            // Surprised: raised brows + open mouth
+            if (browRaise > 0.065 && moRatio > 0.055) {
+                return { emotion: 'Surprised', emoji: '😲', color: '#FFD700' };
+            }
+            // Happy: wide smile
+            if (mwRatio > 0.43) {
+                return { emotion: 'Happy', emoji: '😊', color: '#4CAF50' };
+            }
+            // Angry: furrowed brows + tight mouth
+            if (innerBrowRatio < 0.115 && mwRatio < 0.36 && browRaise < 0.04) {
+                return { emotion: 'Angry', emoji: '😠', color: '#F44336' };
+            }
+            // Sad: mouth corners down
+            if (frownRatio > 0.018) {
+                return { emotion: 'Sad', emoji: '😢', color: '#2196F3' };
+            }
+            return { emotion: 'Neutral', emoji: '😐', color: '#9E9E9E' };
+        }
+
+        // --- FILTER: TRUMP (golden hair + red tie) ---
+        function drawTrump(c, lm, w, h) {
+            var top = pt(lm, 10, w, h);
+            var L = pt(lm, 234, w, h);
+            var R = pt(lm, 454, w, h);
+            var chin = pt(lm, 152, w, h);
+            var fw = R.x - L.x;
+            var fh = chin.y - top.y;
+
+            c.save();
+
+            // Hair body
+            c.beginPath();
+            c.moveTo(L.x - fw * 0.12, top.y + fh * 0.05);
+            c.bezierCurveTo(
+                L.x - fw * 0.05, top.y - fh * 0.28,
+                top.x - fw * 0.15, top.y - fh * 0.42,
+                top.x, top.y - fh * 0.38
+            );
+            c.bezierCurveTo(
+                top.x + fw * 0.25, top.y - fh * 0.5,
+                R.x + fw * 0.15, top.y - fh * 0.22,
+                R.x + fw * 0.12, top.y + fh * 0.05
+            );
+            c.quadraticCurveTo(R.x + fw * 0.02, top.y - fh * 0.02, top.x, top.y - fh * 0.05);
+            c.quadraticCurveTo(L.x - fw * 0.02, top.y - fh * 0.02, L.x - fw * 0.12, top.y + fh * 0.05);
+            c.closePath();
+            var g = c.createLinearGradient(L.x, top.y - fh * 0.45, R.x, top.y);
+            g.addColorStop(0, '#C8961E');
+            g.addColorStop(0.3, '#FFD700');
+            g.addColorStop(0.6, '#FFEC6A');
+            g.addColorStop(1, '#DAA520');
+            c.fillStyle = g;
+            c.fill();
+            c.strokeStyle = '#B8860B';
+            c.lineWidth = 1.5;
+            c.stroke();
+
+            // Hair wave lines
+            c.strokeStyle = 'rgba(160,120,10,0.35)';
+            c.lineWidth = 1.2;
+            for (var i = 0; i < 7; i++) {
+                var t = (i + 1) / 8;
+                var sx = L.x + fw * t;
+                c.beginPath();
+                c.moveTo(sx, top.y - fh * 0.02);
+                c.quadraticCurveTo(sx + fw * 0.06, top.y - fh * (0.12 + t * 0.2), sx + fw * 0.1, top.y - fh * 0.04);
+                c.stroke();
+            }
+
+            // Side hair
+            c.fillStyle = '#DAA520';
+            c.beginPath();
+            c.moveTo(L.x - fw * 0.12, top.y + fh * 0.05);
+            c.quadraticCurveTo(L.x - fw * 0.18, top.y + fh * 0.2, L.x - fw * 0.08, top.y + fh * 0.3);
+            c.quadraticCurveTo(L.x - fw * 0.02, top.y + fh * 0.2, L.x, top.y + fh * 0.12);
+            c.fill();
+            c.beginPath();
+            c.moveTo(R.x + fw * 0.12, top.y + fh * 0.05);
+            c.quadraticCurveTo(R.x + fw * 0.18, top.y + fh * 0.2, R.x + fw * 0.08, top.y + fh * 0.3);
+            c.quadraticCurveTo(R.x + fw * 0.02, top.y + fh * 0.2, R.x, top.y + fh * 0.12);
+            c.fill();
+
+            // Red tie
+            var tx = chin.x, ty = chin.y + fh * 0.02;
+            c.beginPath();
+            c.moveTo(tx - fw * 0.06, ty);
+            c.lineTo(tx + fw * 0.06, ty);
+            c.lineTo(tx + fw * 0.04, ty + fh * 0.04);
+            c.lineTo(tx, ty + fh * 0.22);
+            c.lineTo(tx - fw * 0.04, ty + fh * 0.04);
+            c.closePath();
+            c.fillStyle = '#CC0000';
+            c.fill();
+            c.strokeStyle = '#880000';
+            c.lineWidth = 1;
+            c.stroke();
+            c.beginPath();
+            c.ellipse(tx, ty + fh * 0.02, fw * 0.04, fw * 0.025, 0, 0, Math.PI * 2);
+            c.fillStyle = '#990000';
+            c.fill();
+
+            c.restore();
+        }
+
+        // --- FILTER: MODI (round glasses + white beard + cap) ---
+        function drawModi(c, lm, w, h) {
+            var top = pt(lm, 10, w, h);
+            var chin = pt(lm, 152, w, h);
+            var L = pt(lm, 234, w, h);
+            var R = pt(lm, 454, w, h);
+            var lEye = mid(pt(lm, 33, w, h), pt(lm, 133, w, h));
+            var rEye = mid(pt(lm, 263, w, h), pt(lm, 362, w, h));
+            var nose = pt(lm, 6, w, h);
+            var fw = R.x - L.x;
+            var fh = chin.y - top.y;
+            var eyeR = fw * 0.14;
+
+            c.save();
+
+            // White cap (Gandhi topi)
+            c.beginPath();
+            c.moveTo(L.x + fw * 0.05, top.y - fh * 0.02);
+            c.quadraticCurveTo(top.x, top.y - fh * 0.35, R.x - fw * 0.05, top.y - fh * 0.02);
+            c.quadraticCurveTo(top.x, top.y - fh * 0.12, L.x + fw * 0.05, top.y - fh * 0.02);
+            c.closePath();
+            c.fillStyle = '#F5F5F0';
+            c.fill();
+            c.strokeStyle = '#CCCCBB';
+            c.lineWidth = 1.5;
+            c.stroke();
+            // Cap band
+            c.beginPath();
+            c.moveTo(L.x + fw * 0.1, top.y - fh * 0.05);
+            c.quadraticCurveTo(top.x, top.y - fh * 0.1, R.x - fw * 0.1, top.y - fh * 0.05);
+            c.strokeStyle = '#DDD5C0';
+            c.lineWidth = 3;
+            c.stroke();
+
+            // Round glasses
+            c.strokeStyle = '#554433';
+            c.lineWidth = 2.5;
+            c.beginPath();
+            c.arc(lEye.x, lEye.y, eyeR, 0, Math.PI * 2);
+            c.stroke();
+            c.beginPath();
+            c.arc(rEye.x, rEye.y, eyeR, 0, Math.PI * 2);
+            c.stroke();
+            // Bridge
+            c.beginPath();
+            c.moveTo(lEye.x + eyeR, lEye.y);
+            c.quadraticCurveTo(nose.x, nose.y - fh * 0.06, rEye.x - eyeR, rEye.y);
+            c.stroke();
+            // Temples (arms going to ears)
+            c.beginPath();
+            c.moveTo(lEye.x - eyeR, lEye.y);
+            c.lineTo(L.x - fw * 0.05, lEye.y - fh * 0.02);
+            c.stroke();
+            c.beginPath();
+            c.moveTo(rEye.x + eyeR, rEye.y);
+            c.lineTo(R.x + fw * 0.05, rEye.y - fh * 0.02);
+            c.stroke();
+            // Lens tint
+            c.fillStyle = 'rgba(200,200,180,0.12)';
+            c.beginPath(); c.arc(lEye.x, lEye.y, eyeR - 1, 0, Math.PI * 2); c.fill();
+            c.beginPath(); c.arc(rEye.x, rEye.y, eyeR - 1, 0, Math.PI * 2); c.fill();
+
+            // White beard
+            var mL = pt(lm, 61, w, h);
+            var mR = pt(lm, 291, w, h);
+            var lip = pt(lm, 17, w, h);
+            c.beginPath();
+            c.moveTo(L.x + fw * 0.08, lip.y - fh * 0.02);
+            c.quadraticCurveTo(L.x + fw * 0.02, lip.y + fh * 0.05, L.x + fw * 0.05, chin.y + fh * 0.02);
+            c.quadraticCurveTo(L.x + fw * 0.2, chin.y + fh * 0.12, chin.x, chin.y + fh * 0.14);
+            c.quadraticCurveTo(R.x - fw * 0.2, chin.y + fh * 0.12, R.x - fw * 0.05, chin.y + fh * 0.02);
+            c.quadraticCurveTo(R.x - fw * 0.02, lip.y + fh * 0.05, R.x - fw * 0.08, lip.y - fh * 0.02);
+            c.quadraticCurveTo(chin.x, lip.y + fh * 0.01, L.x + fw * 0.08, lip.y - fh * 0.02);
+            c.closePath();
+            c.fillStyle = '#F0EDE6';
+            c.fill();
+            c.strokeStyle = '#D5D0C5';
+            c.lineWidth = 1;
+            c.stroke();
+            // Beard texture lines
+            c.strokeStyle = 'rgba(180,175,165,0.3)';
+            c.lineWidth = 0.8;
+            for (var i = 0; i < 8; i++) {
+                var t = (i + 1) / 9;
+                var bx = (L.x + fw * 0.1) + (fw * 0.8) * t;
+                c.beginPath();
+                c.moveTo(bx, lip.y + fh * 0.02);
+                c.lineTo(bx + fw * 0.01, chin.y + fh * 0.06);
+                c.stroke();
+            }
+
+            c.restore();
+        }
+
+        // --- FILTER: OBAMA (big ears + short hair + HOPE colors) ---
+        function drawObama(c, lm, w, h) {
+            var top = pt(lm, 10, w, h);
+            var chin = pt(lm, 152, w, h);
+            var L = pt(lm, 234, w, h);
+            var R = pt(lm, 454, w, h);
+            var nose = pt(lm, 1, w, h);
+            var fw = R.x - L.x;
+            var fh = chin.y - top.y;
+
+            c.save();
+
+            // Short dark hair
+            c.beginPath();
+            c.moveTo(L.x - fw * 0.05, top.y + fh * 0.08);
+            c.quadraticCurveTo(L.x, top.y - fh * 0.12, top.x - fw * 0.1, top.y - fh * 0.15);
+            c.quadraticCurveTo(top.x, top.y - fh * 0.18, top.x + fw * 0.1, top.y - fh * 0.15);
+            c.quadraticCurveTo(R.x, top.y - fh * 0.12, R.x + fw * 0.05, top.y + fh * 0.08);
+            c.quadraticCurveTo(R.x, top.y + fh * 0.02, top.x, top.y);
+            c.quadraticCurveTo(L.x, top.y + fh * 0.02, L.x - fw * 0.05, top.y + fh * 0.08);
+            c.closePath();
+            c.fillStyle = '#2C1B0E';
+            c.fill();
+
+            // Big ears (left)
+            c.beginPath();
+            var earY = top.y + fh * 0.35;
+            c.ellipse(L.x - fw * 0.15, earY, fw * 0.08, fh * 0.12, -0.15, 0, Math.PI * 2);
+            c.fillStyle = '#C68E6A';
+            c.fill();
+            c.strokeStyle = '#A0704A';
+            c.lineWidth = 2;
+            c.stroke();
+            // Inner ear
+            c.beginPath();
+            c.ellipse(L.x - fw * 0.13, earY, fw * 0.04, fh * 0.07, -0.15, 0, Math.PI * 2);
+            c.fillStyle = '#B57F5A';
+            c.fill();
+
+            // Big ears (right)
+            c.beginPath();
+            c.ellipse(R.x + fw * 0.15, earY, fw * 0.08, fh * 0.12, 0.15, 0, Math.PI * 2);
+            c.fillStyle = '#C68E6A';
+            c.fill();
+            c.strokeStyle = '#A0704A';
+            c.lineWidth = 2;
+            c.stroke();
+            c.beginPath();
+            c.ellipse(R.x + fw * 0.13, earY, fw * 0.04, fh * 0.07, 0.15, 0, Math.PI * 2);
+            c.fillStyle = '#B57F5A';
+            c.fill();
+
+            // HOPE-style color bands overlay
+            c.globalAlpha = 0.2;
+            // Blue on upper face
+            c.fillStyle = '#004494';
+            c.beginPath();
+            c.ellipse(nose.x, top.y + fh * 0.25, fw * 0.5, fh * 0.25, 0, 0, Math.PI * 2);
+            c.fill();
+            // Red on lower face
+            c.fillStyle = '#BF0A30';
+            c.beginPath();
+            c.ellipse(nose.x, chin.y - fh * 0.15, fw * 0.45, fh * 0.22, 0, 0, Math.PI * 2);
+            c.fill();
+            c.globalAlpha = 1.0;
+
+            // "HOPE" text below chin
+            c.font = 'bold ' + Math.round(fh * 0.1) + 'px "Impact", Arial';
+            c.textAlign = 'center';
+            c.fillStyle = '#004494';
+            c.strokeStyle = '#FFFFFF';
+            c.lineWidth = 2;
+            c.strokeText('HOPE', chin.x, chin.y + fh * 0.18);
+            c.fillText('HOPE', chin.x, chin.y + fh * 0.18);
+
+            c.restore();
+        }
+
+        // --- FILTER: MERKEL (bob hair + pearl necklace + diamond hands) ---
+        function drawMerkel(c, lm, w, h) {
+            var top = pt(lm, 10, w, h);
+            var chin = pt(lm, 152, w, h);
+            var L = pt(lm, 234, w, h);
+            var R = pt(lm, 454, w, h);
+            var fw = R.x - L.x;
+            var fh = chin.y - top.y;
+
+            c.save();
+
+            // Bob haircut
+            c.beginPath();
+            // Top of hair
+            c.moveTo(L.x - fw * 0.15, top.y + fh * 0.15);
+            c.quadraticCurveTo(L.x - fw * 0.1, top.y - fh * 0.18, top.x - fw * 0.05, top.y - fh * 0.2);
+            c.quadraticCurveTo(top.x, top.y - fh * 0.22, top.x + fw * 0.05, top.y - fh * 0.2);
+            c.quadraticCurveTo(R.x + fw * 0.1, top.y - fh * 0.18, R.x + fw * 0.15, top.y + fh * 0.15);
+            // Right side curves in at jaw
+            c.quadraticCurveTo(R.x + fw * 0.18, top.y + fh * 0.45, R.x + fw * 0.05, top.y + fh * 0.55);
+            c.quadraticCurveTo(R.x - fw * 0.05, top.y + fh * 0.58, R.x - fw * 0.1, top.y + fh * 0.5);
+            // Bottom across back of head (hidden, just close path)
+            c.quadraticCurveTo(top.x, top.y + fh * 0.08, L.x + fw * 0.1, top.y + fh * 0.5);
+            c.quadraticCurveTo(L.x + fw * 0.05, top.y + fh * 0.58, L.x - fw * 0.05, top.y + fh * 0.55);
+            c.quadraticCurveTo(L.x - fw * 0.18, top.y + fh * 0.45, L.x - fw * 0.15, top.y + fh * 0.15);
+            c.closePath();
+            var hg = c.createLinearGradient(L.x, top.y - fh * 0.2, R.x, chin.y);
+            hg.addColorStop(0, '#8B7355');
+            hg.addColorStop(0.4, '#A08868');
+            hg.addColorStop(1, '#7A6548');
+            c.fillStyle = hg;
+            c.fill();
+            c.strokeStyle = '#6B5540';
+            c.lineWidth = 1.5;
+            c.stroke();
+
+            // Hair detail lines
+            c.strokeStyle = 'rgba(90,70,50,0.3)';
+            c.lineWidth = 1;
+            for (var i = 0; i < 8; i++) {
+                var t = (i + 1) / 9;
+                var hx = L.x + fw * t;
+                c.beginPath();
+                c.moveTo(hx, top.y - fh * 0.12);
+                c.quadraticCurveTo(hx + fw * 0.02, top.y + fh * 0.15, hx - fw * 0.02, top.y + fh * 0.4);
+                c.stroke();
+            }
+
+            // Pearl necklace
+            var neckY = chin.y + fh * 0.06;
+            var pearlCount = 12;
+            var pearlR = fw * 0.025;
+            c.fillStyle = '#F5F0E8';
+            c.strokeStyle = '#D5D0C5';
+            c.lineWidth = 0.5;
+            for (var i = 0; i < pearlCount; i++) {
+                var angle = Math.PI * 0.15 + (Math.PI * 0.7) * (i / (pearlCount - 1));
+                var px = chin.x + Math.cos(angle) * fw * 0.4;
+                var py = neckY + Math.sin(angle) * fh * 0.08;
+                c.beginPath();
+                c.arc(px, py, pearlR, 0, Math.PI * 2);
+                c.fill();
+                c.stroke();
+                // Pearl shine
+                c.beginPath();
+                c.arc(px - pearlR * 0.3, py - pearlR * 0.3, pearlR * 0.3, 0, Math.PI * 2);
+                c.fillStyle = 'rgba(255,255,255,0.5)';
+                c.fill();
+                c.fillStyle = '#F5F0E8';
+            }
+
+            // Merkel-Raute (diamond hand gesture) drawn as icon below
+            var dY = chin.y + fh * 0.3;
+            var dSize = fw * 0.12;
+            c.beginPath();
+            c.moveTo(chin.x, dY - dSize);
+            c.lineTo(chin.x + dSize, dY);
+            c.lineTo(chin.x, dY + dSize);
+            c.lineTo(chin.x - dSize, dY);
+            c.closePath();
+            c.fillStyle = 'rgba(255,215,0,0.3)';
+            c.fill();
+            c.strokeStyle = '#FFD700';
+            c.lineWidth = 2;
+            c.stroke();
+            // Finger lines
+            c.strokeStyle = '#D4A574';
+            c.lineWidth = 3;
+            c.beginPath();
+            c.moveTo(chin.x - dSize * 1.2, dY + dSize * 0.5);
+            c.quadraticCurveTo(chin.x - dSize * 0.3, dY - dSize * 0.2, chin.x, dY - dSize);
+            c.stroke();
+            c.beginPath();
+            c.moveTo(chin.x + dSize * 1.2, dY + dSize * 0.5);
+            c.quadraticCurveTo(chin.x + dSize * 0.3, dY - dSize * 0.2, chin.x, dY - dSize);
+            c.stroke();
+
+            c.restore();
+        }
+
+        // --- FILTER: PUTIN (aviator sunglasses + ushanka fur hat) ---
+        function drawPutin(c, lm, w, h) {
+            var top = pt(lm, 10, w, h);
+            var chin = pt(lm, 152, w, h);
+            var L = pt(lm, 234, w, h);
+            var R = pt(lm, 454, w, h);
+            var lEye = mid(pt(lm, 33, w, h), pt(lm, 133, w, h));
+            var rEye = mid(pt(lm, 263, w, h), pt(lm, 362, w, h));
+            var nose = pt(lm, 6, w, h);
+            var fw = R.x - L.x;
+            var fh = chin.y - top.y;
+
+            c.save();
+
+            // Ushanka fur hat
+            // Main hat body
+            c.beginPath();
+            c.moveTo(L.x - fw * 0.2, top.y + fh * 0.05);
+            c.quadraticCurveTo(L.x - fw * 0.15, top.y - fh * 0.3, top.x, top.y - fh * 0.35);
+            c.quadraticCurveTo(R.x + fw * 0.15, top.y - fh * 0.3, R.x + fw * 0.2, top.y + fh * 0.05);
+            c.lineTo(R.x + fw * 0.2, top.y + fh * 0.1);
+            c.lineTo(L.x - fw * 0.2, top.y + fh * 0.1);
+            c.closePath();
+            c.fillStyle = '#4A4A4A';
+            c.fill();
+            c.strokeStyle = '#333';
+            c.lineWidth = 1.5;
+            c.stroke();
+
+            // Hat star emblem
+            var starX = top.x, starY = top.y - fh * 0.18;
+            var sr = fh * 0.05;
+            c.fillStyle = '#CC0000';
+            c.beginPath();
+            for (var i = 0; i < 5; i++) {
+                var a = -Math.PI / 2 + (i * 2 * Math.PI / 5);
+                var a2 = a + Math.PI / 5;
+                c.lineTo(starX + Math.cos(a) * sr, starY + Math.sin(a) * sr);
+                c.lineTo(starX + Math.cos(a2) * sr * 0.4, starY + Math.sin(a2) * sr * 0.4);
+            }
+            c.closePath();
+            c.fill();
+
+            // Fur trim (scalloped edge)
+            c.fillStyle = '#8B7D6B';
+            var trimY = top.y + fh * 0.05;
+            var trimH = fh * 0.1;
+            c.beginPath();
+            c.moveTo(L.x - fw * 0.22, trimY);
+            for (var i = 0; i <= 14; i++) {
+                var t = i / 14;
+                var bx = (L.x - fw * 0.22) + (fw * 1.44) * t;
+                var by = trimY + trimH * (0.5 + 0.5 * Math.sin(i * Math.PI * 1.2));
+                if (i === 0) c.moveTo(bx, trimY);
+                c.quadraticCurveTo(bx, by + trimH * 0.3, bx + fw * 0.05, by);
+            }
+            c.lineTo(R.x + fw * 0.22, trimY);
+            c.lineTo(L.x - fw * 0.22, trimY);
+            c.closePath();
+            c.fill();
+            c.strokeStyle = '#6B5D4B';
+            c.lineWidth = 1;
+            c.stroke();
+
+            // Ear flaps
+            c.fillStyle = '#4A4A4A';
+            // Left flap
+            c.beginPath();
+            c.moveTo(L.x - fw * 0.18, trimY);
+            c.quadraticCurveTo(L.x - fw * 0.28, trimY + fh * 0.15, L.x - fw * 0.22, trimY + fh * 0.35);
+            c.quadraticCurveTo(L.x - fw * 0.15, trimY + fh * 0.38, L.x - fw * 0.08, trimY + fh * 0.3);
+            c.quadraticCurveTo(L.x - fw * 0.05, trimY + fh * 0.15, L.x - fw * 0.05, trimY);
+            c.closePath();
+            c.fill();
+            c.stroke();
+            // Left flap fur
+            c.fillStyle = '#8B7D6B';
+            c.beginPath();
+            c.ellipse(L.x - fw * 0.15, trimY + fh * 0.3, fw * 0.06, fh * 0.04, 0, 0, Math.PI * 2);
+            c.fill();
+            // Right flap
+            c.fillStyle = '#4A4A4A';
+            c.beginPath();
+            c.moveTo(R.x + fw * 0.18, trimY);
+            c.quadraticCurveTo(R.x + fw * 0.28, trimY + fh * 0.15, R.x + fw * 0.22, trimY + fh * 0.35);
+            c.quadraticCurveTo(R.x + fw * 0.15, trimY + fh * 0.38, R.x + fw * 0.08, trimY + fh * 0.3);
+            c.quadraticCurveTo(R.x + fw * 0.05, trimY + fh * 0.15, R.x + fw * 0.05, trimY);
+            c.closePath();
+            c.fill();
+            c.stroke();
+            c.fillStyle = '#8B7D6B';
+            c.beginPath();
+            c.ellipse(R.x + fw * 0.15, trimY + fh * 0.3, fw * 0.06, fh * 0.04, 0, 0, Math.PI * 2);
+            c.fill();
+
+            // Aviator sunglasses
+            var glassW = fw * 0.22;
+            var glassH = fh * 0.14;
+            c.fillStyle = 'rgba(10,10,10,0.75)';
+            c.strokeStyle = '#666';
+            c.lineWidth = 2.5;
+            // Left lens (teardrop aviator)
+            c.beginPath();
+            c.moveTo(lEye.x - glassW * 0.1, lEye.y - glassH * 0.5);
+            c.quadraticCurveTo(lEye.x + glassW, lEye.y - glassH * 0.6, lEye.x + glassW * 0.8, lEye.y);
+            c.quadraticCurveTo(lEye.x + glassW * 0.6, lEye.y + glassH * 0.8, lEye.x, lEye.y + glassH * 0.6);
+            c.quadraticCurveTo(lEye.x - glassW * 0.5, lEye.y + glassH * 0.5, lEye.x - glassW * 0.4, lEye.y);
+            c.quadraticCurveTo(lEye.x - glassW * 0.3, lEye.y - glassH * 0.4, lEye.x - glassW * 0.1, lEye.y - glassH * 0.5);
+            c.closePath();
+            c.fill();
+            c.stroke();
+            // Right lens
+            c.beginPath();
+            c.moveTo(rEye.x + glassW * 0.1, rEye.y - glassH * 0.5);
+            c.quadraticCurveTo(rEye.x - glassW, rEye.y - glassH * 0.6, rEye.x - glassW * 0.8, rEye.y);
+            c.quadraticCurveTo(rEye.x - glassW * 0.6, rEye.y + glassH * 0.8, rEye.x, rEye.y + glassH * 0.6);
+            c.quadraticCurveTo(rEye.x + glassW * 0.5, rEye.y + glassH * 0.5, rEye.x + glassW * 0.4, rEye.y);
+            c.quadraticCurveTo(rEye.x + glassW * 0.3, rEye.y - glassH * 0.4, rEye.x + glassW * 0.1, rEye.y - glassH * 0.5);
+            c.closePath();
+            c.fill();
+            c.stroke();
+            // Bridge
+            c.beginPath();
+            c.moveTo(lEye.x + glassW * 0.3, lEye.y - glassH * 0.3);
+            c.quadraticCurveTo(nose.x, nose.y - fh * 0.08, rEye.x - glassW * 0.3, rEye.y - glassH * 0.3);
+            c.stroke();
+            // Lens reflection
+            c.strokeStyle = 'rgba(255,255,255,0.15)';
+            c.lineWidth = 1.5;
+            c.beginPath();
+            c.arc(lEye.x + glassW * 0.15, lEye.y - glassH * 0.1, glassW * 0.2, Math.PI * 1.2, Math.PI * 1.7);
+            c.stroke();
+            c.beginPath();
+            c.arc(rEye.x - glassW * 0.15, rEye.y - glassH * 0.1, glassW * 0.2, Math.PI * 1.2, Math.PI * 1.7);
+            c.stroke();
+
+            c.restore();
+        }
+
+        // --- DISPATCH FILTER ---
+        var filterFns = {
+            trump: drawTrump,
+            modi: drawModi,
+            obama: drawObama,
+            merkel: drawMerkel,
+            putin: drawPutin
+        };
+
+        // --- MEDIAPIPE SETUP ---
+        var holistic = new Holistic({
+            locateFile: function(file) {
+                return 'https://cdn.jsdelivr.net/npm/@mediapipe/holistic/' + file;
+            }
+        });
+        holistic.setOptions({
+            static_image_mode: false,
+            model_complexity: 1,
+            smooth_landmarks: true,
+            refine_face_landmarks: true,
+            min_detection_confidence: 0.5,
+            min_tracking_confidence: 0.5
+        });
         holistic.onResults(onResults);
-        loadMsg.innerHTML = '<div class="loading-spinner"></div><br>Starting camera...';
-        startWebcam();
-    }
 
-    // --- Render ---
-    function onResults(results) {
-        loadMsg.style.display = 'none';
-        var w = videoEl.videoWidth, h = videoEl.videoHeight;
-        if (canvas.width !== w) { canvas.width = w; canvas.height = h; }
+        // --- MAIN RENDER LOOP ---
+        function onResults(results) {
+            loadingMessage.style.display = 'none';
 
-        var emo = detectEmotion(results.faceLandmarks);
-        emoEmoji.textContent = emo.m;
-        emoLabel.textContent = emo.e;
-        emoPill.style.borderColor = emo.c;
+            var w = videoElement.videoWidth;
+            var h = videoElement.videoHeight;
+            if (canvasElement.width !== w) { canvasElement.width = w; canvasElement.height = h; }
 
-        ctx.save();
-        ctx.clearRect(0, 0, w, h);
-        ctx.translate(w, 0);
-        ctx.scale(-1, 1);
-        if (results.image) ctx.drawImage(results.image, 0, 0, w, h);
-        if (showMesh) {
-            drawConnectors(ctx, results.faceLandmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
-            drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
-            drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
-            drawConnectors(ctx, results.leftHandLandmarks, HAND_CONNECTIONS, { color: '#CC0000', lineWidth: 5 });
-            drawLandmarks(ctx, results.leftHandLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
-            drawConnectors(ctx, results.rightHandLandmarks, HAND_CONNECTIONS, { color: '#00CC00', lineWidth: 5 });
-            drawLandmarks(ctx, results.rightHandLandmarks, { color: '#00FF00', lineWidth: 2, radius: 2 });
-        }
-        ctx.restore();
+            // Emotion detection
+            var emo = detectEmotion(results.faceLandmarks);
+            emotionEmoji.textContent = emo.emoji;
+            emotionLabel.textContent = emo.emotion;
+            emotionPill.style.borderColor = emo.color;
 
-        if (activeFilter !== 'none' && results.faceLandmarks) {
-            drawWarped(ctx, activeFilter, results.faceLandmarks, w, h);
-        }
-
-        if (results.faceLandmarks && emo.e !== 'Neutral' && emo.e !== 'No Face') {
+            // Clear
             ctx.save();
-            ctx.font = '60px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(emo.m, w - results.faceLandmarks[10].x * w, results.faceLandmarks[10].y * h - 60);
+            ctx.clearRect(0, 0, w, h);
+
+            // Mirror flip
+            ctx.translate(w, 0);
+            ctx.scale(-1, 1);
+
+            // Draw video
+            if (results.image) {
+                ctx.drawImage(results.image, 0, 0, w, h);
+            }
+
+            // Draw mesh (optional)
+            if (showMesh) {
+                drawConnectors(ctx, results.faceLandmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
+                drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
+                drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
+                drawConnectors(ctx, results.leftHandLandmarks, HAND_CONNECTIONS, { color: '#CC0000', lineWidth: 5 });
+                drawLandmarks(ctx, results.leftHandLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
+                drawConnectors(ctx, results.rightHandLandmarks, HAND_CONNECTIONS, { color: '#00CC00', lineWidth: 5 });
+                drawLandmarks(ctx, results.rightHandLandmarks, { color: '#00FF00', lineWidth: 2, radius: 2 });
+            }
+
+            // Draw politician filter
+            if (activeFilter !== 'none' && results.faceLandmarks && filterFns[activeFilter]) {
+                filterFns[activeFilter](ctx, results.faceLandmarks, w, h);
+            }
+
+            // Flip back for UI overlays
+            ctx.translate(w, 0);
+            ctx.scale(-1, 1);
+
+            // Floating emoji above head
+            if (results.faceLandmarks && emo.emotion !== 'Neutral' && emo.emotion !== 'No Face') {
+                var headX = w - (results.faceLandmarks[10].x * w);
+                var headY = (results.faceLandmarks[10].y * h) - 60;
+                ctx.font = '60px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(emo.emoji, headX, headY);
+            }
+
             ctx.restore();
         }
-    }
 
-    function startWebcam() {
-        var cam = new Camera(videoEl, {
-            onFrame: async function() {
-                if (videoEl.readyState >= 2) await holistic.send({ image: videoEl });
-            },
-            facingMode: 'user'
-        });
-        cam.start().then(function() { console.log('Ready.'); }).catch(function() {
-            loadMsg.innerText = 'Camera Access Denied.';
-            loadMsg.style.display = 'block';
-        });
-    }
-
-    window.onload = function() { waitImages(processSources); };
+        // --- START WEBCAM ---
+        function startWebcam() {
+            var camera = new Camera(videoElement, {
+                onFrame: async function() {
+                    if (videoElement.readyState >= 2) {
+                        await holistic.send({ image: videoElement });
+                    }
+                },
+                facingMode: 'user'
+            });
+            camera.start()
+                .then(function() { console.log('MediaPipe initialized.'); })
+                .catch(function(err) {
+                    console.error('Camera start failed:', err);
+                    loadingMessage.innerText = 'Camera Access Denied or Unavailable.';
+                });
+        }
+        window.onload = startWebcam;
     </script>
 </body>
 </html>
