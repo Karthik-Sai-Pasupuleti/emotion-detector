@@ -3,39 +3,134 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MediaPipe Emotion Detector</title>
+    <title>Emotion Detector + Face Filters</title>
     <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            margin: 0;
             background-color: #1a1a2e;
             color: white;
-            font-family: Arial, sans-serif;
-            overflow: hidden; 
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+            -webkit-user-select: none;
+            user-select: none;
         }
         .container {
             position: relative;
             width: 100vw;
             height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
         }
         #output-canvas {
             position: absolute;
+            top: 0; left: 0;
             width: 100%;
             height: 100%;
-            object-fit: contain; 
+            object-fit: contain;
         }
-        #webcam-video {
-            display: none; 
+        #webcam-video { display: none; }
+
+        #emotion-bar {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 14px 16px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%);
+            pointer-events: none;
         }
+        #emotion-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 18px;
+            border-radius: 30px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 2px solid rgba(255,255,255,0.15);
+            transition: all 0.3s ease;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+        }
+        #emotion-emoji { font-size: 1.5rem; }
+
+        #filter-bar {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 12px 20px;
+            background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%);
+            overflow-x: auto;
+            justify-content: center;
+            flex-wrap: nowrap;
+            scrollbar-width: none;
+        }
+        #filter-bar::-webkit-scrollbar { display: none; }
+        .fbtn {
+            flex-shrink: 0;
+            width: 58px; height: 58px;
+            border-radius: 50%;
+            border: 3px solid rgba(255,255,255,0.25);
+            background: rgba(255,255,255,0.08);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .fbtn.active {
+            border-color: #00d4ff;
+            background: rgba(0,212,255,0.25);
+            box-shadow: 0 0 12px rgba(0,212,255,0.35);
+        }
+        .fbtn:active { transform: scale(0.9); }
+        .fbtn .ico { font-size: 1.4rem; line-height: 1; }
+        .fbtn .lbl { font-size: 0.5rem; font-weight: 600; margin-top: 1px; opacity: 0.9; }
+
+        #mesh-toggle {
+            position: absolute;
+            top: 12px; right: 12px;
+            z-index: 10;
+            width: 42px; height: 42px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.25);
+            background: rgba(255,255,255,0.08);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: white;
+            font-size: 1.1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+            transition: all 0.2s ease;
+        }
+        #mesh-toggle.active {
+            border-color: #00d4ff;
+            background: rgba(0,212,255,0.25);
+        }
+
         #loading-message {
             position: absolute;
-            z-index: 10;
+            z-index: 20;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
             font-size: 1.2rem;
             font-weight: bold;
             text-align: center;
@@ -46,161 +141,708 @@
 <body>
     <div class="container">
         <div id="loading-message">Requesting Camera Access...</div>
+
+        <div id="emotion-bar">
+            <div id="emotion-pill">
+                <span id="emotion-emoji">😐</span>
+                <span id="emotion-label">Neutral</span>
+            </div>
+        </div>
+
+        <button id="mesh-toggle" title="Toggle face mesh">🕸</button>
+
         <video id="webcam-video" autoplay playsinline></video>
         <canvas id="output-canvas"></canvas>
+
+        <div id="filter-bar">
+            <button class="fbtn active" data-filter="none"><span class="ico">🚫</span><span class="lbl">None</span></button>
+            <button class="fbtn" data-filter="trump"><span class="ico">🇺🇸</span><span class="lbl">Trump</span></button>
+            <button class="fbtn" data-filter="modi"><span class="ico">🇮🇳</span><span class="lbl">Modi</span></button>
+            <button class="fbtn" data-filter="obama"><span class="ico">🗽</span><span class="lbl">Obama</span></button>
+            <button class="fbtn" data-filter="merkel"><span class="ico">🇩🇪</span><span class="lbl">Merkel</span></button>
+            <button class="fbtn" data-filter="putin"><span class="ico">🇷🇺</span><span class="lbl">Putin</span></button>
+        </div>
     </div>
-    
+
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
-    
+
     <script>
-        const videoElement = document.getElementById('webcam-video');
-        const canvasElement = document.getElementById('output-canvas');
-        const canvasCtx = canvasElement.getContext('2d');
-        const loadingMessage = document.getElementById('loading-message');
-        
-        let camera;
+        var videoElement = document.getElementById('webcam-video');
+        var canvasElement = document.getElementById('output-canvas');
+        var ctx = canvasElement.getContext('2d');
+        var loadingMessage = document.getElementById('loading-message');
+        var emotionEmoji = document.getElementById('emotion-emoji');
+        var emotionLabel = document.getElementById('emotion-label');
+        var emotionPill = document.getElementById('emotion-pill');
 
-        // Helper function to calculate distance between two 2D points
-        function getDistance(lm1, lm2) {
-            const dx = lm1.x - lm2.x;
-            const dy = lm1.y - lm2.y;
-            return Math.sqrt(dx * dx + dy * dy);
-        }
+        var activeFilter = 'none';
+        var showMesh = true;
 
-        // --- 1. Initialize the Holistic Model ---
-        const holistic = new Holistic({
-            locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`;
-            }
+        // --- UI HANDLERS ---
+        document.querySelectorAll('.fbtn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                document.querySelector('.fbtn.active').classList.remove('active');
+                btn.classList.add('active');
+                activeFilter = btn.dataset.filter;
+            });
+        });
+        document.getElementById('mesh-toggle').addEventListener('click', function() {
+            showMesh = !showMesh;
+            this.classList.toggle('active');
         });
 
+        // --- UTILITY ---
+        function dist(a, b) {
+            var dx = a.x - b.x, dy = a.y - b.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+        function pt(lm, i, w, h) {
+            return { x: lm[i].x * w, y: lm[i].y * h };
+        }
+        function mid(a, b) {
+            return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        }
+
+        // --- EMOTION DETECTION (5 emotions) ---
+        function detectEmotion(face) {
+            if (!face) return { emotion: 'No Face', emoji: '👻', color: '#888' };
+
+            var faceW = dist(face[234], face[454]);
+            var faceH = dist(face[10], face[152]);
+
+            var mouthW = dist(face[61], face[291]);
+            var mouthOpen = dist(face[13], face[14]);
+            var mwRatio = mouthW / faceW;
+            var moRatio = mouthOpen / faceH;
+
+            var avgCornerY = (face[61].y + face[291].y) / 2;
+            var frownRatio = (avgCornerY - face[14].y) / faceH;
+
+            var lBrow = face[159].y - face[105].y;
+            var rBrow = face[386].y - face[334].y;
+            var browRaise = (lBrow + rBrow) / (2 * faceH);
+
+            var innerBrowDist = dist(face[107], face[336]);
+            var innerBrowRatio = innerBrowDist / faceW;
+
+            // Surprised: raised brows + open mouth
+            if (browRaise > 0.065 && moRatio > 0.055) {
+                return { emotion: 'Surprised', emoji: '😲', color: '#FFD700' };
+            }
+            // Happy: wide smile
+            if (mwRatio > 0.43) {
+                return { emotion: 'Happy', emoji: '😊', color: '#4CAF50' };
+            }
+            // Angry: furrowed brows + tight mouth
+            if (innerBrowRatio < 0.115 && mwRatio < 0.36 && browRaise < 0.04) {
+                return { emotion: 'Angry', emoji: '😠', color: '#F44336' };
+            }
+            // Sad: mouth corners down
+            if (frownRatio > 0.018) {
+                return { emotion: 'Sad', emoji: '😢', color: '#2196F3' };
+            }
+            return { emotion: 'Neutral', emoji: '😐', color: '#9E9E9E' };
+        }
+
+        // --- FILTER: TRUMP (golden hair + red tie) ---
+        function drawTrump(c, lm, w, h) {
+            var top = pt(lm, 10, w, h);
+            var L = pt(lm, 234, w, h);
+            var R = pt(lm, 454, w, h);
+            var chin = pt(lm, 152, w, h);
+            var fw = R.x - L.x;
+            var fh = chin.y - top.y;
+
+            c.save();
+
+            // Hair body
+            c.beginPath();
+            c.moveTo(L.x - fw * 0.12, top.y + fh * 0.05);
+            c.bezierCurveTo(
+                L.x - fw * 0.05, top.y - fh * 0.28,
+                top.x - fw * 0.15, top.y - fh * 0.42,
+                top.x, top.y - fh * 0.38
+            );
+            c.bezierCurveTo(
+                top.x + fw * 0.25, top.y - fh * 0.5,
+                R.x + fw * 0.15, top.y - fh * 0.22,
+                R.x + fw * 0.12, top.y + fh * 0.05
+            );
+            c.quadraticCurveTo(R.x + fw * 0.02, top.y - fh * 0.02, top.x, top.y - fh * 0.05);
+            c.quadraticCurveTo(L.x - fw * 0.02, top.y - fh * 0.02, L.x - fw * 0.12, top.y + fh * 0.05);
+            c.closePath();
+            var g = c.createLinearGradient(L.x, top.y - fh * 0.45, R.x, top.y);
+            g.addColorStop(0, '#C8961E');
+            g.addColorStop(0.3, '#FFD700');
+            g.addColorStop(0.6, '#FFEC6A');
+            g.addColorStop(1, '#DAA520');
+            c.fillStyle = g;
+            c.fill();
+            c.strokeStyle = '#B8860B';
+            c.lineWidth = 1.5;
+            c.stroke();
+
+            // Hair wave lines
+            c.strokeStyle = 'rgba(160,120,10,0.35)';
+            c.lineWidth = 1.2;
+            for (var i = 0; i < 7; i++) {
+                var t = (i + 1) / 8;
+                var sx = L.x + fw * t;
+                c.beginPath();
+                c.moveTo(sx, top.y - fh * 0.02);
+                c.quadraticCurveTo(sx + fw * 0.06, top.y - fh * (0.12 + t * 0.2), sx + fw * 0.1, top.y - fh * 0.04);
+                c.stroke();
+            }
+
+            // Side hair
+            c.fillStyle = '#DAA520';
+            c.beginPath();
+            c.moveTo(L.x - fw * 0.12, top.y + fh * 0.05);
+            c.quadraticCurveTo(L.x - fw * 0.18, top.y + fh * 0.2, L.x - fw * 0.08, top.y + fh * 0.3);
+            c.quadraticCurveTo(L.x - fw * 0.02, top.y + fh * 0.2, L.x, top.y + fh * 0.12);
+            c.fill();
+            c.beginPath();
+            c.moveTo(R.x + fw * 0.12, top.y + fh * 0.05);
+            c.quadraticCurveTo(R.x + fw * 0.18, top.y + fh * 0.2, R.x + fw * 0.08, top.y + fh * 0.3);
+            c.quadraticCurveTo(R.x + fw * 0.02, top.y + fh * 0.2, R.x, top.y + fh * 0.12);
+            c.fill();
+
+            // Red tie
+            var tx = chin.x, ty = chin.y + fh * 0.02;
+            c.beginPath();
+            c.moveTo(tx - fw * 0.06, ty);
+            c.lineTo(tx + fw * 0.06, ty);
+            c.lineTo(tx + fw * 0.04, ty + fh * 0.04);
+            c.lineTo(tx, ty + fh * 0.22);
+            c.lineTo(tx - fw * 0.04, ty + fh * 0.04);
+            c.closePath();
+            c.fillStyle = '#CC0000';
+            c.fill();
+            c.strokeStyle = '#880000';
+            c.lineWidth = 1;
+            c.stroke();
+            c.beginPath();
+            c.ellipse(tx, ty + fh * 0.02, fw * 0.04, fw * 0.025, 0, 0, Math.PI * 2);
+            c.fillStyle = '#990000';
+            c.fill();
+
+            c.restore();
+        }
+
+        // --- FILTER: MODI (round glasses + white beard + cap) ---
+        function drawModi(c, lm, w, h) {
+            var top = pt(lm, 10, w, h);
+            var chin = pt(lm, 152, w, h);
+            var L = pt(lm, 234, w, h);
+            var R = pt(lm, 454, w, h);
+            var lEye = mid(pt(lm, 33, w, h), pt(lm, 133, w, h));
+            var rEye = mid(pt(lm, 263, w, h), pt(lm, 362, w, h));
+            var nose = pt(lm, 6, w, h);
+            var fw = R.x - L.x;
+            var fh = chin.y - top.y;
+            var eyeR = fw * 0.14;
+
+            c.save();
+
+            // White cap (Gandhi topi)
+            c.beginPath();
+            c.moveTo(L.x + fw * 0.05, top.y - fh * 0.02);
+            c.quadraticCurveTo(top.x, top.y - fh * 0.35, R.x - fw * 0.05, top.y - fh * 0.02);
+            c.quadraticCurveTo(top.x, top.y - fh * 0.12, L.x + fw * 0.05, top.y - fh * 0.02);
+            c.closePath();
+            c.fillStyle = '#F5F5F0';
+            c.fill();
+            c.strokeStyle = '#CCCCBB';
+            c.lineWidth = 1.5;
+            c.stroke();
+            // Cap band
+            c.beginPath();
+            c.moveTo(L.x + fw * 0.1, top.y - fh * 0.05);
+            c.quadraticCurveTo(top.x, top.y - fh * 0.1, R.x - fw * 0.1, top.y - fh * 0.05);
+            c.strokeStyle = '#DDD5C0';
+            c.lineWidth = 3;
+            c.stroke();
+
+            // Round glasses
+            c.strokeStyle = '#554433';
+            c.lineWidth = 2.5;
+            c.beginPath();
+            c.arc(lEye.x, lEye.y, eyeR, 0, Math.PI * 2);
+            c.stroke();
+            c.beginPath();
+            c.arc(rEye.x, rEye.y, eyeR, 0, Math.PI * 2);
+            c.stroke();
+            // Bridge
+            c.beginPath();
+            c.moveTo(lEye.x + eyeR, lEye.y);
+            c.quadraticCurveTo(nose.x, nose.y - fh * 0.06, rEye.x - eyeR, rEye.y);
+            c.stroke();
+            // Temples (arms going to ears)
+            c.beginPath();
+            c.moveTo(lEye.x - eyeR, lEye.y);
+            c.lineTo(L.x - fw * 0.05, lEye.y - fh * 0.02);
+            c.stroke();
+            c.beginPath();
+            c.moveTo(rEye.x + eyeR, rEye.y);
+            c.lineTo(R.x + fw * 0.05, rEye.y - fh * 0.02);
+            c.stroke();
+            // Lens tint
+            c.fillStyle = 'rgba(200,200,180,0.12)';
+            c.beginPath(); c.arc(lEye.x, lEye.y, eyeR - 1, 0, Math.PI * 2); c.fill();
+            c.beginPath(); c.arc(rEye.x, rEye.y, eyeR - 1, 0, Math.PI * 2); c.fill();
+
+            // White beard
+            var mL = pt(lm, 61, w, h);
+            var mR = pt(lm, 291, w, h);
+            var lip = pt(lm, 17, w, h);
+            c.beginPath();
+            c.moveTo(L.x + fw * 0.08, lip.y - fh * 0.02);
+            c.quadraticCurveTo(L.x + fw * 0.02, lip.y + fh * 0.05, L.x + fw * 0.05, chin.y + fh * 0.02);
+            c.quadraticCurveTo(L.x + fw * 0.2, chin.y + fh * 0.12, chin.x, chin.y + fh * 0.14);
+            c.quadraticCurveTo(R.x - fw * 0.2, chin.y + fh * 0.12, R.x - fw * 0.05, chin.y + fh * 0.02);
+            c.quadraticCurveTo(R.x - fw * 0.02, lip.y + fh * 0.05, R.x - fw * 0.08, lip.y - fh * 0.02);
+            c.quadraticCurveTo(chin.x, lip.y + fh * 0.01, L.x + fw * 0.08, lip.y - fh * 0.02);
+            c.closePath();
+            c.fillStyle = '#F0EDE6';
+            c.fill();
+            c.strokeStyle = '#D5D0C5';
+            c.lineWidth = 1;
+            c.stroke();
+            // Beard texture lines
+            c.strokeStyle = 'rgba(180,175,165,0.3)';
+            c.lineWidth = 0.8;
+            for (var i = 0; i < 8; i++) {
+                var t = (i + 1) / 9;
+                var bx = (L.x + fw * 0.1) + (fw * 0.8) * t;
+                c.beginPath();
+                c.moveTo(bx, lip.y + fh * 0.02);
+                c.lineTo(bx + fw * 0.01, chin.y + fh * 0.06);
+                c.stroke();
+            }
+
+            c.restore();
+        }
+
+        // --- FILTER: OBAMA (big ears + short hair + HOPE colors) ---
+        function drawObama(c, lm, w, h) {
+            var top = pt(lm, 10, w, h);
+            var chin = pt(lm, 152, w, h);
+            var L = pt(lm, 234, w, h);
+            var R = pt(lm, 454, w, h);
+            var nose = pt(lm, 1, w, h);
+            var fw = R.x - L.x;
+            var fh = chin.y - top.y;
+
+            c.save();
+
+            // Short dark hair
+            c.beginPath();
+            c.moveTo(L.x - fw * 0.05, top.y + fh * 0.08);
+            c.quadraticCurveTo(L.x, top.y - fh * 0.12, top.x - fw * 0.1, top.y - fh * 0.15);
+            c.quadraticCurveTo(top.x, top.y - fh * 0.18, top.x + fw * 0.1, top.y - fh * 0.15);
+            c.quadraticCurveTo(R.x, top.y - fh * 0.12, R.x + fw * 0.05, top.y + fh * 0.08);
+            c.quadraticCurveTo(R.x, top.y + fh * 0.02, top.x, top.y);
+            c.quadraticCurveTo(L.x, top.y + fh * 0.02, L.x - fw * 0.05, top.y + fh * 0.08);
+            c.closePath();
+            c.fillStyle = '#2C1B0E';
+            c.fill();
+
+            // Big ears (left)
+            c.beginPath();
+            var earY = top.y + fh * 0.35;
+            c.ellipse(L.x - fw * 0.15, earY, fw * 0.08, fh * 0.12, -0.15, 0, Math.PI * 2);
+            c.fillStyle = '#C68E6A';
+            c.fill();
+            c.strokeStyle = '#A0704A';
+            c.lineWidth = 2;
+            c.stroke();
+            // Inner ear
+            c.beginPath();
+            c.ellipse(L.x - fw * 0.13, earY, fw * 0.04, fh * 0.07, -0.15, 0, Math.PI * 2);
+            c.fillStyle = '#B57F5A';
+            c.fill();
+
+            // Big ears (right)
+            c.beginPath();
+            c.ellipse(R.x + fw * 0.15, earY, fw * 0.08, fh * 0.12, 0.15, 0, Math.PI * 2);
+            c.fillStyle = '#C68E6A';
+            c.fill();
+            c.strokeStyle = '#A0704A';
+            c.lineWidth = 2;
+            c.stroke();
+            c.beginPath();
+            c.ellipse(R.x + fw * 0.13, earY, fw * 0.04, fh * 0.07, 0.15, 0, Math.PI * 2);
+            c.fillStyle = '#B57F5A';
+            c.fill();
+
+            // HOPE-style color bands overlay
+            c.globalAlpha = 0.2;
+            // Blue on upper face
+            c.fillStyle = '#004494';
+            c.beginPath();
+            c.ellipse(nose.x, top.y + fh * 0.25, fw * 0.5, fh * 0.25, 0, 0, Math.PI * 2);
+            c.fill();
+            // Red on lower face
+            c.fillStyle = '#BF0A30';
+            c.beginPath();
+            c.ellipse(nose.x, chin.y - fh * 0.15, fw * 0.45, fh * 0.22, 0, 0, Math.PI * 2);
+            c.fill();
+            c.globalAlpha = 1.0;
+
+            // "HOPE" text below chin
+            c.font = 'bold ' + Math.round(fh * 0.1) + 'px "Impact", Arial';
+            c.textAlign = 'center';
+            c.fillStyle = '#004494';
+            c.strokeStyle = '#FFFFFF';
+            c.lineWidth = 2;
+            c.strokeText('HOPE', chin.x, chin.y + fh * 0.18);
+            c.fillText('HOPE', chin.x, chin.y + fh * 0.18);
+
+            c.restore();
+        }
+
+        // --- FILTER: MERKEL (bob hair + pearl necklace + diamond hands) ---
+        function drawMerkel(c, lm, w, h) {
+            var top = pt(lm, 10, w, h);
+            var chin = pt(lm, 152, w, h);
+            var L = pt(lm, 234, w, h);
+            var R = pt(lm, 454, w, h);
+            var fw = R.x - L.x;
+            var fh = chin.y - top.y;
+
+            c.save();
+
+            // Bob haircut
+            c.beginPath();
+            // Top of hair
+            c.moveTo(L.x - fw * 0.15, top.y + fh * 0.15);
+            c.quadraticCurveTo(L.x - fw * 0.1, top.y - fh * 0.18, top.x - fw * 0.05, top.y - fh * 0.2);
+            c.quadraticCurveTo(top.x, top.y - fh * 0.22, top.x + fw * 0.05, top.y - fh * 0.2);
+            c.quadraticCurveTo(R.x + fw * 0.1, top.y - fh * 0.18, R.x + fw * 0.15, top.y + fh * 0.15);
+            // Right side curves in at jaw
+            c.quadraticCurveTo(R.x + fw * 0.18, top.y + fh * 0.45, R.x + fw * 0.05, top.y + fh * 0.55);
+            c.quadraticCurveTo(R.x - fw * 0.05, top.y + fh * 0.58, R.x - fw * 0.1, top.y + fh * 0.5);
+            // Bottom across back of head (hidden, just close path)
+            c.quadraticCurveTo(top.x, top.y + fh * 0.08, L.x + fw * 0.1, top.y + fh * 0.5);
+            c.quadraticCurveTo(L.x + fw * 0.05, top.y + fh * 0.58, L.x - fw * 0.05, top.y + fh * 0.55);
+            c.quadraticCurveTo(L.x - fw * 0.18, top.y + fh * 0.45, L.x - fw * 0.15, top.y + fh * 0.15);
+            c.closePath();
+            var hg = c.createLinearGradient(L.x, top.y - fh * 0.2, R.x, chin.y);
+            hg.addColorStop(0, '#8B7355');
+            hg.addColorStop(0.4, '#A08868');
+            hg.addColorStop(1, '#7A6548');
+            c.fillStyle = hg;
+            c.fill();
+            c.strokeStyle = '#6B5540';
+            c.lineWidth = 1.5;
+            c.stroke();
+
+            // Hair detail lines
+            c.strokeStyle = 'rgba(90,70,50,0.3)';
+            c.lineWidth = 1;
+            for (var i = 0; i < 8; i++) {
+                var t = (i + 1) / 9;
+                var hx = L.x + fw * t;
+                c.beginPath();
+                c.moveTo(hx, top.y - fh * 0.12);
+                c.quadraticCurveTo(hx + fw * 0.02, top.y + fh * 0.15, hx - fw * 0.02, top.y + fh * 0.4);
+                c.stroke();
+            }
+
+            // Pearl necklace
+            var neckY = chin.y + fh * 0.06;
+            var pearlCount = 12;
+            var pearlR = fw * 0.025;
+            c.fillStyle = '#F5F0E8';
+            c.strokeStyle = '#D5D0C5';
+            c.lineWidth = 0.5;
+            for (var i = 0; i < pearlCount; i++) {
+                var angle = Math.PI * 0.15 + (Math.PI * 0.7) * (i / (pearlCount - 1));
+                var px = chin.x + Math.cos(angle) * fw * 0.4;
+                var py = neckY + Math.sin(angle) * fh * 0.08;
+                c.beginPath();
+                c.arc(px, py, pearlR, 0, Math.PI * 2);
+                c.fill();
+                c.stroke();
+                // Pearl shine
+                c.beginPath();
+                c.arc(px - pearlR * 0.3, py - pearlR * 0.3, pearlR * 0.3, 0, Math.PI * 2);
+                c.fillStyle = 'rgba(255,255,255,0.5)';
+                c.fill();
+                c.fillStyle = '#F5F0E8';
+            }
+
+            // Merkel-Raute (diamond hand gesture) drawn as icon below
+            var dY = chin.y + fh * 0.3;
+            var dSize = fw * 0.12;
+            c.beginPath();
+            c.moveTo(chin.x, dY - dSize);
+            c.lineTo(chin.x + dSize, dY);
+            c.lineTo(chin.x, dY + dSize);
+            c.lineTo(chin.x - dSize, dY);
+            c.closePath();
+            c.fillStyle = 'rgba(255,215,0,0.3)';
+            c.fill();
+            c.strokeStyle = '#FFD700';
+            c.lineWidth = 2;
+            c.stroke();
+            // Finger lines
+            c.strokeStyle = '#D4A574';
+            c.lineWidth = 3;
+            c.beginPath();
+            c.moveTo(chin.x - dSize * 1.2, dY + dSize * 0.5);
+            c.quadraticCurveTo(chin.x - dSize * 0.3, dY - dSize * 0.2, chin.x, dY - dSize);
+            c.stroke();
+            c.beginPath();
+            c.moveTo(chin.x + dSize * 1.2, dY + dSize * 0.5);
+            c.quadraticCurveTo(chin.x + dSize * 0.3, dY - dSize * 0.2, chin.x, dY - dSize);
+            c.stroke();
+
+            c.restore();
+        }
+
+        // --- FILTER: PUTIN (aviator sunglasses + ushanka fur hat) ---
+        function drawPutin(c, lm, w, h) {
+            var top = pt(lm, 10, w, h);
+            var chin = pt(lm, 152, w, h);
+            var L = pt(lm, 234, w, h);
+            var R = pt(lm, 454, w, h);
+            var lEye = mid(pt(lm, 33, w, h), pt(lm, 133, w, h));
+            var rEye = mid(pt(lm, 263, w, h), pt(lm, 362, w, h));
+            var nose = pt(lm, 6, w, h);
+            var fw = R.x - L.x;
+            var fh = chin.y - top.y;
+
+            c.save();
+
+            // Ushanka fur hat
+            // Main hat body
+            c.beginPath();
+            c.moveTo(L.x - fw * 0.2, top.y + fh * 0.05);
+            c.quadraticCurveTo(L.x - fw * 0.15, top.y - fh * 0.3, top.x, top.y - fh * 0.35);
+            c.quadraticCurveTo(R.x + fw * 0.15, top.y - fh * 0.3, R.x + fw * 0.2, top.y + fh * 0.05);
+            c.lineTo(R.x + fw * 0.2, top.y + fh * 0.1);
+            c.lineTo(L.x - fw * 0.2, top.y + fh * 0.1);
+            c.closePath();
+            c.fillStyle = '#4A4A4A';
+            c.fill();
+            c.strokeStyle = '#333';
+            c.lineWidth = 1.5;
+            c.stroke();
+
+            // Hat star emblem
+            var starX = top.x, starY = top.y - fh * 0.18;
+            var sr = fh * 0.05;
+            c.fillStyle = '#CC0000';
+            c.beginPath();
+            for (var i = 0; i < 5; i++) {
+                var a = -Math.PI / 2 + (i * 2 * Math.PI / 5);
+                var a2 = a + Math.PI / 5;
+                c.lineTo(starX + Math.cos(a) * sr, starY + Math.sin(a) * sr);
+                c.lineTo(starX + Math.cos(a2) * sr * 0.4, starY + Math.sin(a2) * sr * 0.4);
+            }
+            c.closePath();
+            c.fill();
+
+            // Fur trim (scalloped edge)
+            c.fillStyle = '#8B7D6B';
+            var trimY = top.y + fh * 0.05;
+            var trimH = fh * 0.1;
+            c.beginPath();
+            c.moveTo(L.x - fw * 0.22, trimY);
+            for (var i = 0; i <= 14; i++) {
+                var t = i / 14;
+                var bx = (L.x - fw * 0.22) + (fw * 1.44) * t;
+                var by = trimY + trimH * (0.5 + 0.5 * Math.sin(i * Math.PI * 1.2));
+                if (i === 0) c.moveTo(bx, trimY);
+                c.quadraticCurveTo(bx, by + trimH * 0.3, bx + fw * 0.05, by);
+            }
+            c.lineTo(R.x + fw * 0.22, trimY);
+            c.lineTo(L.x - fw * 0.22, trimY);
+            c.closePath();
+            c.fill();
+            c.strokeStyle = '#6B5D4B';
+            c.lineWidth = 1;
+            c.stroke();
+
+            // Ear flaps
+            c.fillStyle = '#4A4A4A';
+            // Left flap
+            c.beginPath();
+            c.moveTo(L.x - fw * 0.18, trimY);
+            c.quadraticCurveTo(L.x - fw * 0.28, trimY + fh * 0.15, L.x - fw * 0.22, trimY + fh * 0.35);
+            c.quadraticCurveTo(L.x - fw * 0.15, trimY + fh * 0.38, L.x - fw * 0.08, trimY + fh * 0.3);
+            c.quadraticCurveTo(L.x - fw * 0.05, trimY + fh * 0.15, L.x - fw * 0.05, trimY);
+            c.closePath();
+            c.fill();
+            c.stroke();
+            // Left flap fur
+            c.fillStyle = '#8B7D6B';
+            c.beginPath();
+            c.ellipse(L.x - fw * 0.15, trimY + fh * 0.3, fw * 0.06, fh * 0.04, 0, 0, Math.PI * 2);
+            c.fill();
+            // Right flap
+            c.fillStyle = '#4A4A4A';
+            c.beginPath();
+            c.moveTo(R.x + fw * 0.18, trimY);
+            c.quadraticCurveTo(R.x + fw * 0.28, trimY + fh * 0.15, R.x + fw * 0.22, trimY + fh * 0.35);
+            c.quadraticCurveTo(R.x + fw * 0.15, trimY + fh * 0.38, R.x + fw * 0.08, trimY + fh * 0.3);
+            c.quadraticCurveTo(R.x + fw * 0.05, trimY + fh * 0.15, R.x + fw * 0.05, trimY);
+            c.closePath();
+            c.fill();
+            c.stroke();
+            c.fillStyle = '#8B7D6B';
+            c.beginPath();
+            c.ellipse(R.x + fw * 0.15, trimY + fh * 0.3, fw * 0.06, fh * 0.04, 0, 0, Math.PI * 2);
+            c.fill();
+
+            // Aviator sunglasses
+            var glassW = fw * 0.22;
+            var glassH = fh * 0.14;
+            c.fillStyle = 'rgba(10,10,10,0.75)';
+            c.strokeStyle = '#666';
+            c.lineWidth = 2.5;
+            // Left lens (teardrop aviator)
+            c.beginPath();
+            c.moveTo(lEye.x - glassW * 0.1, lEye.y - glassH * 0.5);
+            c.quadraticCurveTo(lEye.x + glassW, lEye.y - glassH * 0.6, lEye.x + glassW * 0.8, lEye.y);
+            c.quadraticCurveTo(lEye.x + glassW * 0.6, lEye.y + glassH * 0.8, lEye.x, lEye.y + glassH * 0.6);
+            c.quadraticCurveTo(lEye.x - glassW * 0.5, lEye.y + glassH * 0.5, lEye.x - glassW * 0.4, lEye.y);
+            c.quadraticCurveTo(lEye.x - glassW * 0.3, lEye.y - glassH * 0.4, lEye.x - glassW * 0.1, lEye.y - glassH * 0.5);
+            c.closePath();
+            c.fill();
+            c.stroke();
+            // Right lens
+            c.beginPath();
+            c.moveTo(rEye.x + glassW * 0.1, rEye.y - glassH * 0.5);
+            c.quadraticCurveTo(rEye.x - glassW, rEye.y - glassH * 0.6, rEye.x - glassW * 0.8, rEye.y);
+            c.quadraticCurveTo(rEye.x - glassW * 0.6, rEye.y + glassH * 0.8, rEye.x, rEye.y + glassH * 0.6);
+            c.quadraticCurveTo(rEye.x + glassW * 0.5, rEye.y + glassH * 0.5, rEye.x + glassW * 0.4, rEye.y);
+            c.quadraticCurveTo(rEye.x + glassW * 0.3, rEye.y - glassH * 0.4, rEye.x + glassW * 0.1, rEye.y - glassH * 0.5);
+            c.closePath();
+            c.fill();
+            c.stroke();
+            // Bridge
+            c.beginPath();
+            c.moveTo(lEye.x + glassW * 0.3, lEye.y - glassH * 0.3);
+            c.quadraticCurveTo(nose.x, nose.y - fh * 0.08, rEye.x - glassW * 0.3, rEye.y - glassH * 0.3);
+            c.stroke();
+            // Lens reflection
+            c.strokeStyle = 'rgba(255,255,255,0.15)';
+            c.lineWidth = 1.5;
+            c.beginPath();
+            c.arc(lEye.x + glassW * 0.15, lEye.y - glassH * 0.1, glassW * 0.2, Math.PI * 1.2, Math.PI * 1.7);
+            c.stroke();
+            c.beginPath();
+            c.arc(rEye.x - glassW * 0.15, rEye.y - glassH * 0.1, glassW * 0.2, Math.PI * 1.2, Math.PI * 1.7);
+            c.stroke();
+
+            c.restore();
+        }
+
+        // --- DISPATCH FILTER ---
+        var filterFns = {
+            trump: drawTrump,
+            modi: drawModi,
+            obama: drawObama,
+            merkel: drawMerkel,
+            putin: drawPutin
+        };
+
+        // --- MEDIAPIPE SETUP ---
+        var holistic = new Holistic({
+            locateFile: function(file) {
+                return 'https://cdn.jsdelivr.net/npm/@mediapipe/holistic/' + file;
+            }
+        });
         holistic.setOptions({
             static_image_mode: false,
-            model_complexity: 1, 
+            model_complexity: 1,
             smooth_landmarks: true,
             refine_face_landmarks: true,
             min_detection_confidence: 0.5,
             min_tracking_confidence: 0.5
         });
-
         holistic.onResults(onResults);
 
-        // --- 2. Handle Model Results and Drawing ---
+        // --- MAIN RENDER LOOP ---
         function onResults(results) {
             loadingMessage.style.display = 'none';
 
-            if (canvasElement.width !== videoElement.videoWidth) {
-                canvasElement.width = videoElement.videoWidth;
-                canvasElement.height = videoElement.videoHeight;
-            }
+            var w = videoElement.videoWidth;
+            var h = videoElement.videoHeight;
+            if (canvasElement.width !== w) { canvasElement.width = w; canvasElement.height = h; }
 
-            // --- Emotion Detection Logic ---
-            let isSmiling = false;
-            let isSad = false;
-            let headX = 0;
-            let headY = 0;
+            // Emotion detection
+            var emo = detectEmotion(results.faceLandmarks);
+            emotionEmoji.textContent = emo.emoji;
+            emotionLabel.textContent = emo.emotion;
+            emotionPill.style.borderColor = emo.color;
 
-            if (results.faceLandmarks) {
-                // Landmarks for smile detection (Width-based)
-                const mouthWidth = getDistance(results.faceLandmarks[61], results.faceLandmarks[291]);
-                const faceWidth = getDistance(results.faceLandmarks[234], results.faceLandmarks[454]);
-                
-                // Landmarks for sad detection (Y-axis based)
-                // Y-coordinates increase as you go DOWN the screen
-                const leftCornerY = results.faceLandmarks[61].y;
-                const rightCornerY = results.faceLandmarks[291].y;
-                const bottomLipCenterY = results.faceLandmarks[14].y;
-                const faceHeight = getDistance(results.faceLandmarks[10], results.faceLandmarks[152]);
-                
-                // Calculate average Y position of mouth corners
-                const averageCornerY = (leftCornerY + rightCornerY) / 2;
-                
-                // Frown ratio: how far below the center lip the corners are, normalized by face height
-                const frownRatio = (averageCornerY - bottomLipCenterY) / faceHeight;
+            // Clear
+            ctx.save();
+            ctx.clearRect(0, 0, w, h);
 
-                // Priority 1: Check for Smile
-                if ((mouthWidth / faceWidth) > 0.43) {
-                    isSmiling = true;
-                } 
-                // Priority 2: Check for Sadness if not smiling
-                // Tune this number (e.g., 0.015 to 0.025) if it's too sensitive or not sensitive enough
-                else if (frownRatio > 0.018) {
-                    isSad = true;
-                }
+            // Mirror flip
+            ctx.translate(w, 0);
+            ctx.scale(-1, 1);
 
-                // Calculate position above the head for the emoji
-                if (isSmiling || isSad) {
-                    headX = canvasElement.width - (results.faceLandmarks[10].x * canvasElement.width);
-                    headY = (results.faceLandmarks[10].y * canvasElement.height) - 50; 
-                }
-            }
-
-            // 1. Clear Canvas
-            canvasCtx.save();
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-            // 2. Mirror Flip
-            canvasCtx.translate(canvasElement.width, 0);
-            canvasCtx.scale(-1, 1);
-
-            // Draw Video
+            // Draw video
             if (results.image) {
-                canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+                ctx.drawImage(results.image, 0, 0, w, h);
             }
 
-            // Draw Landmarks
-            drawConnectors(canvasCtx, results.faceLandmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
-            drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
-            drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
-            drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, { color: '#CC0000', lineWidth: 5 });
-            drawLandmarks(canvasCtx, results.leftHandLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
-            drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, { color: '#00CC00', lineWidth: 5 });
-            drawLandmarks(canvasCtx, results.rightHandLandmarks, { color: '#00FF00', lineWidth: 2, radius: 2 });
-
-            // 3. Inverse Flip for Text/Emojis
-            canvasCtx.translate(canvasElement.width, 0); 
-            canvasCtx.scale(-1, 1); 
-
-            // 4. Draw Emojis based on detected emotion
-            if (isSmiling || isSad) {
-                canvasCtx.font = '60px Arial';
-                canvasCtx.textAlign = 'center';
-                
-                const topEmoji = isSmiling ? '😊' : '😢';
-                const cornerEmoji = isSmiling ? '😁' : '😔';
-
-                // Floating above head
-                canvasCtx.fillText(topEmoji, headX, headY);
-
-                // Top left corner
-                canvasCtx.textAlign = 'left';
-                canvasCtx.fillText(cornerEmoji, 20, 60);
+            // Draw mesh (optional)
+            if (showMesh) {
+                drawConnectors(ctx, results.faceLandmarks, FACEMESH_TESSELATION, { color: '#C0C0C070', lineWidth: 1 });
+                drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
+                drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
+                drawConnectors(ctx, results.leftHandLandmarks, HAND_CONNECTIONS, { color: '#CC0000', lineWidth: 5 });
+                drawLandmarks(ctx, results.leftHandLandmarks, { color: '#FF0000', lineWidth: 2, radius: 2 });
+                drawConnectors(ctx, results.rightHandLandmarks, HAND_CONNECTIONS, { color: '#00CC00', lineWidth: 5 });
+                drawLandmarks(ctx, results.rightHandLandmarks, { color: '#00FF00', lineWidth: 2, radius: 2 });
             }
 
-            canvasCtx.restore();
+            // Draw politician filter
+            if (activeFilter !== 'none' && results.faceLandmarks && filterFns[activeFilter]) {
+                filterFns[activeFilter](ctx, results.faceLandmarks, w, h);
+            }
+
+            // Flip back for UI overlays
+            ctx.translate(w, 0);
+            ctx.scale(-1, 1);
+
+            // Floating emoji above head
+            if (results.faceLandmarks && emo.emotion !== 'Neutral' && emo.emotion !== 'No Face') {
+                var headX = w - (results.faceLandmarks[10].x * w);
+                var headY = (results.faceLandmarks[10].y * h) - 60;
+                ctx.font = '60px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(emo.emoji, headX, headY);
+            }
+
+            ctx.restore();
         }
 
-        // --- 3. Start Webcam ---
+        // --- START WEBCAM ---
         function startWebcam() {
-            camera = new Camera(videoElement, {
-                onFrame: async () => {
+            var camera = new Camera(videoElement, {
+                onFrame: async function() {
                     if (videoElement.readyState >= 2) {
                         await holistic.send({ image: videoElement });
                     }
                 },
-                facingMode: 'user' 
+                facingMode: 'user'
             });
-
             camera.start()
-                .then(() => console.log("MediaPipe initialized."))
-                .catch(err => {
-                    console.error("Camera start failed:", err);
-                    loadingMessage.innerText = "Camera Access Denied or Unavailable.";
+                .then(function() { console.log('MediaPipe initialized.'); })
+                .catch(function(err) {
+                    console.error('Camera start failed:', err);
+                    loadingMessage.innerText = 'Camera Access Denied or Unavailable.';
                 });
         }
-
         window.onload = startWebcam;
     </script>
 </body>
